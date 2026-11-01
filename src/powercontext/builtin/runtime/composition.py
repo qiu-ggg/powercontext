@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
 from datetime import timedelta
 from functools import partial
@@ -126,6 +126,10 @@ from powercontext.builtin.runtime.artifact_processing import (
     ArtifactProcessingSupervisor,
     ArtifactProcessingSupervisors,
     SpawnArtifactProcessingWorkerLauncher,
+)
+from powercontext.builtin.runtime.processing_contracts import (
+    ArtifactProcessingWorkerCompletion,
+    ArtifactProcessingWorkerOutcome,
 )
 from powercontext.builtin.runtime.config import BuiltinConfig, ExternalSkillsConfig, InferenceConfig, RuntimeConfig
 from powercontext.builtin.runtime.decision_model import (
@@ -532,10 +536,12 @@ async def open_builtin_runtime(
         for name, readiness_probe in inference_readiness:
             if readiness_probe is not None:
                 readiness_probes[name] = ReadinessProbeDefinition(probe=readiness_probe, blocking=False)
+        count_admission = _CountAdmissionHook()
         processing_bindings = _artifact_processing_bindings(
             config,
             contexts,
             artifact_processing_bindings,
+            count_admission=count_admission,
             injected_embedding_model=embedding_model,
             injected_token_estimator=token_estimator,
             injected_pipelines={
@@ -655,6 +661,7 @@ async def open_builtin_runtime(
                 remote_ingestion=contexts,
             )
         )
+        count_admission.bind(runtime._admit_by_source_count)
         runtime.artifact_processing_supervisor = await resources.enter_async_context(
             _open_artifact_processing_supervisor(config, contexts, processing_bindings, tracing=tracing)
         )
@@ -668,6 +675,65 @@ async def open_builtin_runtime(
             raise BuiltinConfigurationError("memory-reranker")
         _require_decision_backend(config.runtime, configured_decision)
         yield runtime
+
+
+class _CountAdmissionHook:
+    """Re-check the count threshold after a Family wave succeeds.
+
+    A window consumes at most ``source_window_limit`` entries, so reaching the
+    threshold once is not the same as draining the input. The count condition has
+    to be judged again against the cursor the wave committed, otherwise the
+    remaining entries wait for input that will never arrive. The callback is bound
+    once the Runtime exists, which is after the bindings are assembled.
+    """
+
+    def __init__(self) -> None:
+        self._callback: Callable[[str], Awaitable[None]] | None = None
+
+    def bind(self, callback: Callable[[str], Awaitable[None]]) -> None:
+        self._callback = callback
+
+    async def after_success(self, scope_id: str) -> None:
+        if self._callback is None:
+            return
+        try:
+            await self._callback(scope_id)
+        except Exception as error:  # noqa: BLE001 - a failed recheck must not fail the wave
+            log_safely(
+                logger,
+                logging.WARNING,
+                "Count admission recheck failed",
+                exc_info=error,
+                extra={"event": "artifact_processing.count_admission.recheck_failed", "outcome": "skipped"},
+            )
+
+
+class _CountAdmissionLauncher:
+    """Wrap a Family launcher so a successful wave triggers one count recheck."""
+
+    def __init__(self, inner: Any, hook: _CountAdmissionHook) -> None:
+        self._inner = inner
+        self._hook = hook
+
+    async def start(self, assignment: Any) -> Any:
+        handle = await self._inner.start(assignment)
+        return _CountAdmissionHandle(handle, assignment.scope_id, self._hook)
+
+
+class _CountAdmissionHandle:
+    def __init__(self, inner: Any, scope_id: str, hook: _CountAdmissionHook) -> None:
+        self._inner = inner
+        self._scope_id = scope_id
+        self._hook = hook
+
+    async def wait(self) -> ArtifactProcessingWorkerCompletion:
+        completion = await self._inner.wait()
+        if completion.outcome == ArtifactProcessingWorkerOutcome.SUCCEEDED:
+            await self._hook.after_success(self._scope_id)
+        return completion
+
+    async def terminate(self) -> None:
+        await self._inner.terminate()
 
 
 def _source_count_thresholds(config: BuiltinConfig) -> dict[str, int]:
@@ -718,8 +784,10 @@ def _artifact_processing_bindings(  # noqa: C901 - validate and assemble one reg
     injected_memory_write_gate: MemoryWriteGate | None = None,
     worker_security: dict[str, Any] | None = None,
     source_registry: SourceDefinitionRegistry = BUILTIN_SOURCE_REGISTRY,
+    count_admission: _CountAdmissionHook | None = None,
 ) -> tuple[ArtifactProcessingBinding, ...]:
     configured = list(bindings)
+    count_thresholds = _source_count_thresholds(config)
     _validate_processing_registrations(configured)
     capabilities = processing_capabilities(config)
     canonical = {**FAMILY_BINDINGS, "topic-memory": TOPIC_MEMORY_SOURCE_WINDOW_BINDING}
@@ -786,11 +854,14 @@ def _artifact_processing_bindings(  # noqa: C901 - validate and assemble one reg
             entrypoint = partial(run_family_worker, FamilyWorkerSpec(config=config, worker_security=worker_security))
         interval = None if family == "profile" else automatic[family]
         binding = canonical[family]
+        launcher = SpawnArtifactProcessingWorkerLauncher(entrypoint)
+        if count_admission is not None and binding in count_thresholds:
+            launcher = _CountAdmissionLauncher(launcher, count_admission)
         configured.append(
             ArtifactProcessingBinding(
                 binding_name=binding,
                 artifact_family=family,
-                launcher=SpawnArtifactProcessingWorkerLauncher(entrypoint),
+                launcher=launcher,
                 max_workers=getattr(config.runtime, f"{prefix}_max_workers"),
                 worker_timeout_seconds=getattr(config.runtime, f"{prefix}_worker_timeout_seconds"),
                 automatic_processing_interval=None if interval is None else timedelta(seconds=float(interval)),

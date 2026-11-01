@@ -110,7 +110,7 @@ _SUFFIXES = (
 _BM25_K1 = 1.2
 #: Pages of a 10-K run from a 40-token cover sheet to a 900-token statement, so
 #: full length normalisation buries the long narrative pages that hold the answer.
-_BM25_B = 0.35
+_BM25_B = 0.45
 #: Section titles ("Item 3. Legal Proceedings.", "Consolidated Statement of Cash
 #: Flows") name the answer far more reliably than the body text around them.
 _HEADING_WEIGHT = 1.0
@@ -127,6 +127,47 @@ _CONCEPT_WEIGHT = 0.45
 #: statement far more often than by a narrative page, so pages carrying a
 #: statement title receive a fraction of the top page score as a bonus.
 _STATEMENT_WEIGHT = 0.2
+
+#: A metric question is often answered by a statement page that hardly repeats
+#: the question's own wording ("operating margin" -> the income statement), so
+#: the statement named by the question gets its own ranking pass and a decisive
+#: position bonus instead of competing on wording alone.
+_FACET_WEIGHT = 2.0
+_FACET_DEPTH = 4
+#: Rank-fusion damping. Every pass contributes through the position it reaches,
+#: so passes with incomparable score scales stay comparable.
+_FUSION_DAMPING = 40
+#: How deep the wording pass feeds the fusion. Only the result window matters,
+#: and a generous depth keeps the pass transparent to its own ordering.
+_FUSION_DEPTH = 200
+#: Weight of the term-coverage pass. It is a different question from "how often
+#: does a term repeat", so it gets its own pass instead of a score tweak.
+_COVERAGE_WEIGHT = 1.5
+_COVERAGE_DEPTH = 6
+#: Only a handful of pages print a primary statement, and they are the ones that
+#: carry the numbers, so the facet pass looks at the densest of them first.
+_STATEMENT_FACETS = (
+    (
+        r"operating margin|gross margin|margin|operating income|operating profit|operating loss|"
+        r"net income|earnings|revenue|revenues|sales|profit|segment|segments|p&l|income statement|"
+        r"ebitda|effective tax|per share|expense|expenses|cost|costs|growth|drag",
+        (
+            r"consolidated statements? of (income|operations|earnings|profit)",
+            r"consolidated (income|earnings) statement",
+            r"statements? of (income|operations|earnings)",
+            r"consolidated statements? of comprehensive income",
+        ),
+    ),
+    (
+        r"cash flow|capex|capital expenditure|depreciation|amortization|liquidity|dividend",
+        (r"consolidated statements? of cash flows?", r"consolidated cash flow statement"),
+    ),
+    (
+        r"balance sheet|financial position|debt|liabilit|asset|assets|capital.intens|"
+        r"current ratio|quick ratio|working capital|return on|roa|roe|inventory turn|leverage",
+        (r"consolidated balance sheets?", r"consolidated statements? of financial position"),
+    ),
+)
 
 _STATEMENT_PATTERN = re.compile(
     r"consolidated\s+(statement|balance|statements)\s+of\s+"
@@ -445,6 +486,82 @@ def _idf(document_frequency: int, total: int) -> float:
     return math.log(1.0 + (total - document_frequency + 0.5) / (document_frequency + 0.5))
 
 
+def _strip_document_ids(texts: Sequence[str]) -> list[str]:
+    """Drop the leading document id line the text projection prepends.
+
+    The projection writes ``DOCUMENT_ID\\nPAGE_TEXT``, so every page of a filing
+    repeats the same id on its first line. Left in place it shifts the collection
+    statistics and the heading of every page, which is enough to push a correct
+    page out of the result window. Only a line that repeats and carries no space
+    is removed: real page text almost never starts that way, and a single-page
+    document keeps its text verbatim.
+    """
+
+    counts: Counter[str] = Counter()
+    for text in texts:
+        line = text.split("\n", 1)[0].strip()
+        if line and not any(character.isspace() for character in line):
+            counts[line] += 1
+    repeated = {line for line, count in counts.items() if count > 1}
+    if not repeated:
+        return list(texts)
+    stripped = []
+    for text in texts:
+        head, separator, tail = text.partition("\n")
+        stripped.append(tail if separator and head.strip() in repeated else text)
+    return stripped
+
+
+def _numeric_density(text: str) -> float:
+    """Share of tokens that are digits: primary statements are dense, prose is not."""
+
+    tokens = _WORD_PATTERN.findall(text.lower())
+    if not tokens:
+        return 0.0
+    return sum(token.isdigit() or token.replace(",", "").replace(".", "").isdigit() for token in tokens) / len(tokens)
+
+
+def _coverage_order(
+    weights: dict[str, float],
+    bodies: Sequence[Counter],
+    texts: Sequence[str],
+) -> list[int]:
+    """Order pages by how many distinct question terms they actually contain.
+
+    Relevance is not only about how often a term repeats: the page that answers
+    a question tends to touch more of its terms than the page that merely
+    discusses one of them at length. Numeric density breaks the ties, because the
+    terms of a metric question meet on a table more often than in prose.
+    """
+
+    keys = [term for term in weights if not term.isdigit()]
+    if not keys:
+        return []
+    scored: list[tuple[float, int]] = []
+    for index, counter in enumerate(bodies):
+        covered = sum(1 for term in keys if counter.get(term))
+        if covered:
+            scored.append((covered / len(keys) * (1.0 + _numeric_density(texts[index])), index))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [index for _, index in scored]
+
+
+def _statement_facets(question: str) -> tuple[tuple[str, ...], ...]:
+    return tuple(patterns for trigger, patterns in _STATEMENT_FACETS if re.search(trigger, question, re.I))
+
+
+def _facet_order(texts: Sequence[str], titles: Sequence[str], patterns: Sequence[str]) -> list[int]:
+    """Order the pages that print the statement the question's metric implies."""
+
+    selected: list[tuple[float, int]] = []
+    for index, title in enumerate(titles):
+        haystack = title.lower() or texts[index][:300].lower()
+        if any(re.search(pattern, haystack) for pattern in patterns):
+            selected.append((_numeric_density(texts[index]), index))
+    selected.sort(key=lambda item: (-item[0], item[1]))
+    return [index for _, index in selected]
+
+
 def _bm25(
     weights: dict[str, float],
     counters: list[Counter],
@@ -481,12 +598,24 @@ def _rank(
     dominates; the other three break the ties that a bag of words cannot.
     """
 
+    fused, _, _ = _rank_parts(texts, question)
+    return _ordered(fused)
+
+
+def _rank_parts(
+    texts: tuple[str, ...],
+    question: str,
+) -> tuple[dict[int, float], tuple[str, ...], list[str]]:
+    """Return the fused score per entry together with the texts it was built from."""
+
     if not texts:
+        return {}, (), []
         return []
+    texts = tuple(_strip_document_ids(texts))
     bodies = [Counter(_tokenize(text)) for text in texts]
     weights = _expand(_query_weights(question), bodies)
     if not weights:
-        return []
+        return {}, texts, [_headings(text) for text in texts]
 
     body_lengths = [sum(counter.values()) for counter in bodies]
     body_average = sum(body_lengths) / len(body_lengths)
@@ -525,9 +654,39 @@ def _rank(
             (score + bonus if _is_statement_page(titles[index]) else score, index)
             for score, index in ordered
         ]
-    # Ties fall back to page order, which keeps the result deterministic.
     ordered.sort(key=lambda item: (-item[0], item[1]))
-    return [index for _, index in ordered]
+
+    # Every pass contributes through the position it reaches, so the wording
+    # ranking and the statement passes stay comparable even though their score
+    # scales differ. A single pass keeps its own order under this fusion.
+    return _rank_scores(ordered, texts, titles, question, weights, bodies), texts, titles
+
+
+def _rank_scores(
+    ordered: list[tuple[float, int]],
+    texts: Sequence[str],
+    titles: Sequence[str],
+    question: str,
+    weights: dict[str, float] | None = None,
+    bodies: Sequence[Counter] | None = None,
+) -> dict[int, float]:
+    fused: dict[int, float] = {}
+    for rank, (_, index) in enumerate(ordered[:_FUSION_DEPTH], 1):
+        fused[index] = 1.0 / (_FUSION_DAMPING + rank)
+    for patterns in _statement_facets(question):
+        for rank, index in enumerate(_facet_order(texts, titles, patterns)[:_FACET_DEPTH], 1):
+            fused[index] = fused.get(index, 0.0) + _FACET_WEIGHT / (_FUSION_DAMPING + rank)
+    if _COVERAGE_WEIGHT and weights and bodies is not None:
+        for rank, index in enumerate(
+            _coverage_order(weights, bodies, texts)[:_COVERAGE_DEPTH], 1
+        ):
+            fused[index] = fused.get(index, 0.0) + _COVERAGE_WEIGHT / (_FUSION_DAMPING + rank)
+    return fused
+
+
+def _ordered(fused: dict[int, float]) -> list[int]:
+    # Ties fall back to page order, which keeps the result deterministic.
+    return [index for index, _ in sorted(fused.items(), key=lambda item: (-item[1], item[0]))]
 
 
 async def search_pdf_pages(
@@ -546,9 +705,10 @@ async def search_pdf_pages(
     if not records:
         return ()
 
-    ordered = _rank(tuple(record.entry.text for record in records), query)
+    fused, _, _ = _rank_parts(tuple(record.entry.text for record in records), query)
+
     citations: list[MemoryCitation] = []
-    for index in ordered:
+    for index in _ordered(fused):
         citation = records[index].citation
         if citation in citations:
             continue
