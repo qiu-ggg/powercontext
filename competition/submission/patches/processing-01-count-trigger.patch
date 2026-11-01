@@ -1,0 +1,221 @@
+diff -ruN a/src/powercontext/builtin/runtime/artifact_processing.py b/src/powercontext/builtin/runtime/artifact_processing.py
+--- a/src/powercontext/builtin/runtime/artifact_processing.py	2026-11-02 03:24:40
++++ b/src/powercontext/builtin/runtime/artifact_processing.py	2026-11-02 03:24:40
+@@ -47,6 +47,7 @@
+     from multiprocessing.popen_spawn_posix import Popen as SpawnPopen
+ 
+ from powercontext._logging import log_safely
++from powercontext.builtin.persistence.cursors import SourceCursorRepository
+ from powercontext.builtin.persistence.database import AsyncDatabase
+ from powercontext.builtin.persistence.errors import ArtifactProcessingLeadershipLostError
+ from powercontext.builtin.persistence.processing_intents import ArtifactProcessingIntentRepository
+@@ -57,7 +58,11 @@
+     ArtifactProcessingLeaseRepository,
+     database_utc_now,
+ )
+-from powercontext.builtin.persistence.tables import ARTIFACT_PROCESSING_INTENTS_TABLE, ARTIFACT_PROCESSING_LEASES_TABLE
++from powercontext.builtin.persistence.tables import (
++    ARTIFACT_PROCESSING_INTENTS_TABLE,
++    ARTIFACT_PROCESSING_LEASES_TABLE,
++    SOURCE_JOURNAL_HEADS_TABLE,
++)
+ from powercontext.builtin.runtime.processing_contracts import (
+     ArtifactProcessingWorkAssignment,
+     ArtifactProcessingWorkerCompletion,
+@@ -80,6 +85,10 @@
+ _CHANNEL_QUEUE_LIMIT = _DISCOVERY_PAGE_SIZE // 2
+ _DISCOVERY_PAGE_DELAY_SECONDS = 0.01
+ _DISCOVERY_TIMEOUT_SECONDS = 2.0
++# A count threshold has no natural timer, so the count channel is re-examined on
++# a bounded cadence. It stays far below the shortest documented wait, so a
++# reached threshold is observed without a caller-visible delay.
++_COUNT_SCAN_INTERVAL_SECONDS = 0.25
+ _SPAWN_SIGTERM_GRACE_SECONDS = 1.0
+ _WORKER_SHUTDOWN_TIMEOUT_SECONDS = 5.0
+ ProcessingKey = tuple[str, str]
+@@ -112,6 +121,9 @@
+     automatic_processing_interval: timedelta | None = None
+     cron: str | None = None
+     timezone: str = "Asia/Shanghai"
++    # Independent of the time channel: reaching this many unprocessed Source
++    # journal identities starts one ordinary processing call on its own.
++    source_count_threshold: int | None = None
+     config_prefix: str | None = None
+     pending_provider: ArtifactProcessingPendingProvider | None = None
+     # Only automatic admission is filtered; already accepted requests retain
+@@ -138,6 +150,10 @@
+                 raise ValueError("interval and cron cannot both be enabled")  # noqa: TRY003
+         if self.cron is not None:
+             CronTrigger.from_crontab(self.cron, timezone=ZoneInfo(self.timezone))
++        if self.source_count_threshold is not None and (
++            type(self.source_count_threshold) is not int or self.source_count_threshold < 1
++        ):
++            raise ValueError("source_count_threshold must be a positive integer")  # noqa: TRY003
+ 
+ 
+ class _WorkerResultSender(Protocol):
+@@ -397,6 +413,8 @@
+     scan_in_progress: bool = False
+     reconcile_after: str | None = None
+     reconcile_complete: bool = False
++    count_after: str | None = None
++    next_count_at: float = 0.0
+     notification_at_start: int = 0
+     discovery_pending: bool = True
+     next_schedule_at: float | None = None
+@@ -585,6 +603,8 @@
+             state.discovery_pending = True
+             state.reconcile_complete = False
+             state.reconcile_after = None
++            state.count_after = None
++            state.next_count_at = 0.0
+         if self._lease_mode == "oceanbase":
+             self._renew_task = asyncio.create_task(self._renew(), name=f"artifact-lease-{self._supervisor_group}")
+ 
+@@ -648,6 +668,9 @@
+                 state.next_discovery_at = loop.time() + _DISCOVERY_PAGE_DELAY_SECONDS
+         else:
+             state.reconcile_complete = True
++        if binding.source_count_threshold is not None and loop.time() >= state.next_count_at:
++            await self._discover_counted(state)
++            state.next_count_at = asyncio.get_running_loop().time() + _COUNT_SCAN_INTERVAL_SECONDS
+         # Alternate discovery channels so explicit traffic cannot monopolize admission.
+         state.automatic_next = not state.automatic_next
+         if state.automatic_next:
+@@ -782,6 +805,65 @@
+         for scope in admitted:
+             self._enqueue(state, scope)
+ 
++    async def _discover_counted(self, state: _FamilyState) -> None:
++        """Accept one ordinary call for each Scope that reached its count threshold.
++
++        The pending amount is the distance between the durable journal head and
++        the last successfully committed cursor of this binding, so replays,
++        receipt trust upgrades and consumed history cannot inflate it. Only the
++        start of a call is gated; how much one call consumes stays a per-read
++        window limit.
++        """
++
++        binding = state.binding
++        threshold = binding.source_count_threshold
++        if threshold is None:
++            return
++        heads = SOURCE_JOURNAL_HEADS_TABLE
++        statement = select(heads.c.scope_id, heads.c.position).order_by(heads.c.scope_id).limit(_DISCOVERY_PAGE_SIZE)
++        if state.count_after is not None:
++            statement = statement.where(heads.c.scope_id > state.count_after)
++        admitted: list[str] = []
++        capacity = self._fresh_capacity(state)
++        if capacity <= 0:
++            return
++        last_examined: str | None = None
++        truncated = False
++        async with self._database.transaction() as connection:
++            await self._leases.require_fence(connection, self._require_current_fence())
++            rows = (await connection.execute(statement)).all()
++            # One batched cursor read per page keeps the scan flat as the number
++            # of Scopes grows; a per-Scope load would cost one round trip each.
++            cursors = await SourceCursorRepository().load_many(
++                connection, [scope for scope, _ in rows], binding.binding_name
++            )
++            for scope, high in rows:
++                if len(admitted) >= capacity:
++                    # Leave the rest of the page for the next pass instead of
++                    # overflowing the bounded ready queue.
++                    truncated = True
++                    break
++                last_examined = scope
++                if scope in state.queued or scope in state.running or scope in state.retries:
++                    continue
++                stored = cursors.get(scope)
++                consumed = 0 if stored is None else stored.cursor.sequence
++                if int(high) - consumed < threshold:
++                    continue
++                intent = await self._intents.load(connection, scope, binding.binding_name, for_update=True)
++                # An accepted call that has not been acknowledged keeps its own
++                # authorization; retry owns it, so the gate must not duplicate it.
++                if intent is not None and intent.requested_generation > intent.handled_generation:
++                    continue
++                await self._intents.request(connection, scope, binding.binding_name)
++                admitted.append(scope)
++        if truncated:
++            state.count_after = last_examined
++        else:
++            state.count_after = str(rows[-1][0]) if len(rows) == _DISCOVERY_PAGE_SIZE else None
++        for scope in admitted:
++            self._enqueue(state, scope)
++
+     @staticmethod
+     def _fresh_capacity(state: _FamilyState) -> int:
+         return min(
+@@ -1059,6 +1141,7 @@
+             state.retries.clear()
+             state.requested_after = state.scan_after = state.scan_generation = 0
+             state.scan_in_progress = False
++            state.count_after = None
+             state.discovery_pending = True
+ 
+     async def _reap_unconfirmed_exits(self) -> None:
+@@ -1093,6 +1176,8 @@
+                 continue
+             if state.next_schedule_at is not None:
+                 deadlines.append(state.next_schedule_at)
++            if state.binding.source_count_threshold is not None:
++                deadlines.append(state.next_count_at)
+             if state.discovery_pending or state.scan_in_progress or not state.reconcile_complete or state.degraded:
+                 deadlines.append(max(now, state.next_discovery_at))
+         return None if not deadlines else max(0.001, min(deadlines) - now)
+diff -ruN a/src/powercontext/builtin/runtime/composition.py b/src/powercontext/builtin/runtime/composition.py
+--- a/src/powercontext/builtin/runtime/composition.py	2026-11-02 03:24:38
++++ b/src/powercontext/builtin/runtime/composition.py	2026-11-02 03:24:39
+@@ -783,6 +783,7 @@
+                 if family == "profile" and config.runtime.profile_schedule_enabled
+                 else None,
+                 timezone=config.runtime.profile_timezone if family == "profile" else "Asia/Shanghai",
++                source_count_threshold=getattr(config.runtime, f"{prefix}_source_count_threshold", None),
+                 pending_provider=None
+                 if family == "skill"
+                 else SourceProcessingPendingProvider(contexts.database, binding, family),
+diff -ruN a/src/powercontext/builtin/runtime/config.py b/src/powercontext/builtin/runtime/config.py
+--- a/src/powercontext/builtin/runtime/config.py	2026-11-02 03:24:36
++++ b/src/powercontext/builtin/runtime/config.py	2026-11-02 03:24:37
+@@ -202,6 +202,10 @@
+     schedule_seconds: float | None = Field(default=None, gt=0)
+     memory_schedule_seconds: float | None = Field(default=None, gt=0)
+     experience_schedule_seconds: float | None = Field(default=None, gt=0)
++    # Count admission is independent of the time channel: either condition may
++    # start one ordinary processing call. ``None`` keeps the previous behavior.
++    memory_source_count_threshold: int | None = None
++    topic_memory_source_count_threshold: int | None = None
+     dream_enabled: bool = True
+     dream_max_pending_per_scope: int = Field(default=32, ge=1, le=1000)
+     generation_concurrency: int = Field(default=4, ge=1, le=64)
+@@ -229,6 +233,28 @@
+     model_usage_queue_capacity: int = Field(default=256, ge=1, le=16_384)
+     model_usage_write_timeout_seconds: float = Field(default=1.0, gt=0, le=30)
+     model_usage_flush_timeout_seconds: float = Field(default=0.5, gt=0, le=30)
++
++    @field_validator(
++        "memory_source_count_threshold",
++        "topic_memory_source_count_threshold",
++        mode="before",
++    )
++    @classmethod
++    def reject_non_strict_count_threshold(cls, value: Any) -> Any:
++        """Accept only ``None`` or a real positive ``int``.
++
++        A count threshold decides whether work starts, so an approximate value
++        is a configuration mistake: booleans, strings and floats are rejected
++        instead of being coerced into a number nobody wrote.
++        """
++
++        if value is None:
++            return None
++        if type(value) is not int:
++            raise ValueError("Source count threshold must be a positive integer")  # noqa: TRY003, TRY004
++        if value < 1:
++            raise ValueError("Source count threshold must be a positive integer")  # noqa: TRY003
++        return value
+ 
+     @model_validator(mode="after")
+     def validate_topic_memory_history_candidates(self) -> RuntimeConfig:
