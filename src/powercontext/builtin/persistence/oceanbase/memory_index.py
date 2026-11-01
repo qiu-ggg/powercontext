@@ -16,6 +16,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from pyobvector import VECTOR, VectorIndex
 from sqlalchemy import (
     BigInteger,
@@ -42,7 +45,7 @@ from powercontext.builtin.artifacts.memory import (
     MemorySearchRequest,
 )
 from powercontext.builtin.artifacts.memory.canonical import embedding_content_hash, validate_embedding
-from powercontext.builtin.persistence.memory_index import memory_channel_hits
+from powercontext.builtin.persistence.memory_index import CompositeMemoryIndex, memory_channel_hits
 from powercontext.builtin.persistence.tables import (
     ARTIFACT_HEADS_TABLE,
     MAX_MEMORY_ENTRY_ID_LENGTH,
@@ -96,6 +99,47 @@ WHERE m.scope_id = :scope_id
   AND m.memory_artifact_id IN :memory_artifact_ids
 ORDER BY l2_distance(m.embedding, :query_vector) APPROXIMATE
 LIMIT :candidate_limit
+"""
+
+# The FTS branch of the native hybrid statement. It mirrors the SQLAlchemy select
+# used by the FTS-only path: same join, same filter, same ORDER BY, same limit, so
+# the candidate list is identical when the channel is read on its own.
+_OCEANBASE_FTS_SEARCH_SQL = """
+SELECT
+    'fts' AS channel,
+    h.memory_artifact_id,
+    h.head_revision,
+    h.entry_id,
+    h.entry_version_id,
+    v.text,
+    CAST(NULL AS DOUBLE) AS distance
+FROM pc_memory_entry_heads AS h
+JOIN pc_memory_entry_versions AS v
+  ON v.scope_id = h.scope_id
+ AND v.memory_artifact_id = h.memory_artifact_id
+ AND v.entry_version_id = h.entry_version_id
+WHERE h.scope_id = :scope_id
+  AND h.memory_artifact_id IN :memory_artifact_ids
+  AND MATCH(h.searchable_text) AGAINST (:analyzed_query IN NATURAL LANGUAGE MODE)
+{tag_filter}
+ORDER BY MATCH(h.searchable_text) AGAINST (:analyzed_query IN NATURAL LANGUAGE MODE) DESC,
+         h.memory_artifact_id,
+         h.entry_id,
+         h.entry_version_id
+LIMIT :candidate_limit
+"""
+
+# One statement carries both candidate channels. Each branch keeps its own native
+# index access (full-text scan, vector index) and its own candidate limit, so the
+# database still does the filtering and the ranking; the caller only merges.
+_OCEANBASE_HYBRID_SEARCH_SQL = """
+SELECT * FROM (
+{fts}
+) AS fts_candidates
+UNION ALL
+SELECT * FROM (
+{vector}
+) AS vector_candidates
 """
 
 
@@ -504,3 +548,76 @@ def _embedding_hash(profile: EmbeddingProfile, entry_hash: str) -> str:
         normalization=profile.normalization,
         entry_content_hash=entry_hash,
     )
+
+
+class OceanBaseHybridMemoryIndex(CompositeMemoryIndex):
+    """Serve hybrid candidates from a single native statement.
+
+    The full-text branch and the vector branch keep their own native access path,
+    filter and candidate limit; only the statement that carries them is shared. A
+    single-channel request is delegated unchanged.
+    """
+
+    def __init__(self, fts: OceanBaseMemoryFTSIndex, vector: OceanBaseMemoryVectorIndex) -> None:
+        super().__init__(fts, vector)
+        self._fts = fts
+        self._vector = vector
+
+    async def search(
+        self,
+        connection: AsyncConnection,
+        scope_id: str,
+        request: MemorySearchRequest,
+        /,
+    ) -> MemorySearchChannels:
+        if request.mode != "hybrid":
+            return await super().search(connection, scope_id, request)
+        profile = self._vector.profile
+        if request.embedding_profile != profile or request.query_vector is None:
+            raise CapabilityNotSupportedError("embedding-profile")
+        if not await self._vector.vector_complete(connection, scope_id, request.memories, profile):
+            raise CapabilityNotSupportedError("vector")
+
+        vector_sql = _OCEANBASE_VECTOR_SEARCH_SQL
+        if request.tag_filter is not None:
+            vector_sql = vector_sql.replace(
+                "ORDER BY", memory_tag_sql("m") + "ORDER BY"
+            ).replace(" APPROXIMATE", "")
+        vector_sql = vector_sql.replace("SELECT\n", "SELECT\n    'vector' AS channel,\n", 1)
+        statement = text(
+            _OCEANBASE_HYBRID_SEARCH_SQL.format(
+                fts=_OCEANBASE_FTS_SEARCH_SQL.format(
+                    tag_filter="" if request.tag_filter is None else memory_tag_sql("h")
+                ),
+                vector=vector_sql,
+            )
+        ).bindparams(
+            bindparam("memory_artifact_ids", expanding=True),
+            bindparam("query_vector", type_=VECTOR(profile.dimension)),
+        )
+        if request.tag_filter is not None:
+            statement = statement.bindparams(
+                bindparam("tag_keys", expanding=True),
+                bindparam("tag_hashes", expanding=True),
+            )
+        rows = (
+            await connection.execute(
+                statement,
+                {
+                    "scope_id": scope_id,
+                    "memory_artifact_ids": tuple(memory.artifact_id for memory in request.memories),
+                    "analyzed_query": request.analyzed_query,
+                    "query_vector": validate_embedding(request.query_vector, dimension=profile.dimension),
+                    "candidate_limit": request.candidate_limit,
+                    **memory_tag_parameters(request.tag_filter),
+                },
+            )
+        ).mappings()
+        fts_rows: list[Mapping[Any, Any]] = []
+        vector_rows: list[Mapping[Any, Any]] = []
+        for row in rows:
+            (fts_rows if str(row["channel"]) == "fts" else vector_rows).append(row)
+        return MemorySearchChannels(
+            fts=memory_channel_hits(fts_rows, request.memories),
+            vector=memory_channel_hits(vector_rows, request.memories),
+        )
