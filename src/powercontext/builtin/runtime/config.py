@@ -201,6 +201,10 @@ class RuntimeConfig(BaseModel):
 
     schedule_seconds: float | None = Field(default=None, gt=0)
     memory_schedule_seconds: float | None = Field(default=None, gt=0)
+    # Count admission: start one ordinary invocation once this many new journal
+    # identities wait behind the Family cursor. None keeps the time-only behaviour.
+    memory_source_count_threshold: int | None = Field(default=None, strict=True, ge=1)
+    topic_memory_source_count_threshold: int | None = Field(default=None, strict=True, ge=1)
     experience_schedule_seconds: float | None = Field(default=None, gt=0)
     dream_enabled: bool = True
     dream_max_pending_per_scope: int = Field(default=32, ge=1, le=1000)

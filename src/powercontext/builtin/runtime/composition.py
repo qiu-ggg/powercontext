@@ -597,6 +597,7 @@ async def open_builtin_runtime(
                     prompts=dict(contexts.prompt_registry.capabilities),
                 ),
                 source_window_limit=config.runtime.source_window_limit,
+                source_count_thresholds=_source_count_thresholds(config),
                 context_assembly_max_entries=config.runtime.context_assembly_max_entries,
                 recall_sufficiency_policy=RecallSufficiencyPolicy.from_runtime_config(config.runtime),
                 scope_cache_size=config.runtime.scope_cache_size,
@@ -667,6 +668,19 @@ async def open_builtin_runtime(
             raise BuiltinConfigurationError("memory-reranker")
         _require_decision_backend(config.runtime, configured_decision)
         yield runtime
+
+
+def _source_count_thresholds(config: BuiltinConfig) -> dict[str, int]:
+    """Map each configured count threshold to the binding whose cursor it measures."""
+
+    thresholds: dict[str, int] = {}
+    memory = config.runtime.memory_source_count_threshold
+    if memory is not None:
+        thresholds[FAMILY_BINDINGS["memory"]] = memory
+    topic_memory = config.runtime.topic_memory_source_count_threshold
+    if topic_memory is not None:
+        thresholds[TOPIC_MEMORY_SOURCE_WINDOW_BINDING] = topic_memory
+    return thresholds
 
 
 def _validate_processing_source_registry(

@@ -27,6 +27,7 @@ from time import perf_counter
 from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import BaseModel, JsonValue, ValidationError
+from sqlalchemy import func, select
 
 from powercontext._logging import log_safely
 from powercontext.artifacts import ArtifactRef
@@ -143,7 +144,10 @@ from powercontext.builtin.persistence.artifact_governance import (
     ArtifactGovernance,
     ArtifactLifecycleState,
 )
+from powercontext.builtin.persistence.cursors import SourceCursorRepository
+from powercontext.builtin.persistence.processing_intents import ArtifactProcessingIntentRepository
 from powercontext.builtin.persistence.skill_publications import SkillPublication
+from powercontext.builtin.persistence.tables import SOURCES_TABLE
 from powercontext.builtin.publication import ArtifactPublicationApplication
 from powercontext.builtin.records import (
     ArtifactCreated,
@@ -470,7 +474,9 @@ class ScopedSourceApplication:
         self.scope_id = validate_scope_id(scope_id)
 
     async def capture(self, value: CaptureSource, /) -> SourceReceipt:
-        return await self._capture(value)
+        receipt = await self._capture(value)
+        await self._runtime._admit_by_source_count(self.scope_id)
+        return receipt
 
     async def _capture(self, value: CaptureSource, /, *, handoff_receipt: bool = False) -> SourceReceipt:
         if self._runtime._record_service is not None:
@@ -564,7 +570,11 @@ class ScopedRecordApplication:
         /,
     ) -> ArtifactCreated:
         async with self._runtime._scope_operation(self.scope_id), self._runtime._locked(self.scope_id):
-            return await self._runtime._records().create_artifact(self.scope_id, family, write)
+            created = await self._runtime._records().create_artifact(self.scope_id, family, write)
+        # A lineage-only journal identity counts toward admission even though it
+        # never becomes generation evidence.
+        await self._runtime._admit_by_source_count(self.scope_id)
+        return created
 
     async def get_artifact(self, family: str, artifact_id: str, /) -> ArtifactRecord:
         async with self._runtime._scope_operation(self.scope_id):
@@ -3036,6 +3046,7 @@ class BuiltinRuntime:
         capabilities: RuntimeCapabilities,
         code_service: CodeService | None = None,
         source_window_limit: int = 100,
+        source_count_thresholds: Mapping[str, int] | None = None,
         context_assembly_max_entries: int = 8,
         recall_sufficiency_policy: RecallSufficiencyPolicy | None = None,
         scope_cache_size: int = DEFAULT_SCOPE_CACHE_SIZE,
@@ -3140,6 +3151,9 @@ class BuiltinRuntime:
         self._scheduled_source_runner = scheduled_source_runner
         self._scheduled_experience_runner = scheduled_experience_runner
         self.source_window_limit = source_window_limit
+        self._source_count_thresholds = {} if source_count_thresholds is None else dict(source_count_thresholds)
+        self._cursors = SourceCursorRepository()
+        self._intents = ArtifactProcessingIntentRepository()
         self.context_assembly_max_entries = context_assembly_max_entries
         self.recall_sufficiency_policy = recall_sufficiency_policy
         self._scope_cache = ScopeCache(
@@ -3441,6 +3455,57 @@ class BuiltinRuntime:
 
     def _lock(self, scope_id: str) -> asyncio.Lock:
         return self._scope_cache.lock(validate_scope_id(scope_id))
+
+    async def _admit_by_source_count(self, scope_id: str) -> None:
+        """Accept one ordinary invocation per Family whose pending journal identities reached its threshold.
+
+        Pending is counted behind the Family's own success cursor, so replayed
+        identities, receipt trust upgrades and already-consumed history never
+        raise it. Only automatic admission is filtered: an explicit flush accepts
+        its own invocation, and the time condition keeps its own schedule.
+        """
+
+        if not self._source_count_thresholds:
+            return
+        database = getattr(self._provider, "database", None)
+        if database is None:
+            return
+        admitted = False
+        async with database.transaction() as connection:
+            for binding_name, threshold in self._source_count_thresholds.items():
+                cursor = await self._cursors.load(connection, scope_id, binding_name)
+                after = 0 if cursor is None else cursor.cursor.sequence
+                pending = int(
+                    await connection.scalar(
+                        select(func.count())
+                        .select_from(SOURCES_TABLE)
+                        .where(
+                            SOURCES_TABLE.c.scope_id == scope_id,
+                            SOURCES_TABLE.c.journal_position > after,
+                        )
+                    )
+                    or 0
+                )
+                if pending < threshold:
+                    continue
+                intent = await self._intents.load(connection, scope_id, binding_name, for_update=True)
+                if intent is not None and intent.requested_generation > intent.handled_generation:
+                    # An accepted-but-unfinished invocation already owns this work.
+                    continue
+                await self._intents.request(connection, scope_id, binding_name)
+                admitted = True
+        if not admitted or self.artifact_processing_supervisor is None:
+            return
+        try:
+            self.artifact_processing_supervisor.wake()
+        except Exception as error:
+            log_safely(
+                logger,
+                logging.WARNING,
+                "Count admission wake failed",
+                exc_info=error,
+                extra={"event": "artifact_processing.count_admission.wake_failed", "outcome": "accepted"},
+            )
 
     @asynccontextmanager
     async def _locked(self, scope_id: str) -> AsyncIterator[None]:
