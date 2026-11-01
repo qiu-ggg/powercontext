@@ -1,6 +1,6 @@
-diff -ruN a/src/powercontext/builtin/runtime/artifact_processing.py b/src/powercontext/builtin/runtime/artifact_processing.py
---- a/src/powercontext/builtin/runtime/artifact_processing.py	2026-11-02 03:24:40
-+++ b/src/powercontext/builtin/runtime/artifact_processing.py	2026-11-02 03:24:40
+diff -ruN friend/src/powercontext/builtin/runtime/artifact_processing.py friend_b/src/powercontext/builtin/runtime/artifact_processing.py
+--- friend/src/powercontext/builtin/runtime/artifact_processing.py	2026-11-02 03:35:57
++++ friend_b/src/powercontext/builtin/runtime/artifact_processing.py	2026-11-02 03:36:37
 @@ -47,6 +47,7 @@
      from multiprocessing.popen_spawn_posix import Popen as SpawnPopen
  
@@ -165,20 +165,20 @@ diff -ruN a/src/powercontext/builtin/runtime/artifact_processing.py b/src/powerc
              if state.discovery_pending or state.scan_in_progress or not state.reconcile_complete or state.degraded:
                  deadlines.append(max(now, state.next_discovery_at))
          return None if not deadlines else max(0.001, min(deadlines) - now)
-diff -ruN a/src/powercontext/builtin/runtime/composition.py b/src/powercontext/builtin/runtime/composition.py
---- a/src/powercontext/builtin/runtime/composition.py	2026-11-02 03:24:38
-+++ b/src/powercontext/builtin/runtime/composition.py	2026-11-02 03:24:39
-@@ -783,6 +783,7 @@
-                 if family == "profile" and config.runtime.profile_schedule_enabled
-                 else None,
-                 timezone=config.runtime.profile_timezone if family == "profile" else "Asia/Shanghai",
-+                source_count_threshold=getattr(config.runtime, f"{prefix}_source_count_threshold", None),
-                 pending_provider=None
+diff -ruN friend/src/powercontext/builtin/runtime/composition.py friend_b/src/powercontext/builtin/runtime/composition.py
+--- friend/src/powercontext/builtin/runtime/composition.py	2026-11-02 03:35:56
++++ friend_b/src/powercontext/builtin/runtime/composition.py	2026-11-02 03:36:35
+@@ -788,6 +788,7 @@
                  if family == "skill"
                  else SourceProcessingPendingProvider(contexts.database, binding, family),
-diff -ruN a/src/powercontext/builtin/runtime/config.py b/src/powercontext/builtin/runtime/config.py
---- a/src/powercontext/builtin/runtime/config.py	2026-11-02 03:24:36
-+++ b/src/powercontext/builtin/runtime/config.py	2026-11-02 03:24:37
+                 automatic_scope_filter=enabled_profile_scopes if family == "profile" else None,
++                source_count_threshold=getattr(config.runtime, f"{prefix}_source_count_threshold", None),
+             )
+         )
+     _validate_processing_registrations(configured)
+diff -ruN friend/src/powercontext/builtin/runtime/config.py friend_b/src/powercontext/builtin/runtime/config.py
+--- friend/src/powercontext/builtin/runtime/config.py	2026-11-02 03:35:54
++++ friend_b/src/powercontext/builtin/runtime/config.py	2026-11-02 03:36:36
 @@ -202,6 +202,10 @@
      schedule_seconds: float | None = Field(default=None, gt=0)
      memory_schedule_seconds: float | None = Field(default=None, gt=0)
