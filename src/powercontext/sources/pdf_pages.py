@@ -34,6 +34,7 @@ import io
 import math
 import re
 from collections import Counter
+from collections.abc import Sequence
 from urllib.parse import quote
 
 from pydantic import BaseModel, model_validator
@@ -383,20 +384,39 @@ def _concept_terms(term: str) -> frozenset[str]:
     return frozenset(merged)
 
 
-def _expand(weights: dict[str, float]) -> dict[str, float]:
+def _expand(
+    weights: dict[str, float],
+    counters: Sequence[Counter] = (),
+) -> dict[str, float]:
     """Add the accounting vocabulary that the question's concepts imply.
 
     The expansion never overrides a term the question already used: a question
     that says "revenue" keeps weight 1.0 even if "revenue" is also an expansion
     term for "gross".
+
+    How hard a trigger pulls is scaled by how rare it is across the pages at
+    hand. A stem such as ``operat`` is a verb in most questions and a margin
+    term in a few; if nearly every page prints it, it cannot be what the
+    question meant, so its expansion is scaled down instead of flooding the
+    query with statements vocabulary and dragging every question onto the
+    financial pages.
     """
 
     if not _CONCEPTS:
-        return weights
+        return dict(weights)
     expanded = dict(weights)
-    for term in weights:
-        for extra in _concept_terms(term):
-            expanded[extra] = max(expanded.get(extra, 0.0), _CONCEPT_WEIGHT)
+    ceiling = _idf(1, max(len(counters), 1)) or 1.0
+    for term, weight in weights.items():
+        extras = _concept_terms(term)
+        if not extras:
+            continue
+        reach = _CONCEPT_WEIGHT
+        if counters:
+            document_frequency = sum(1 for counter in counters if counter.get(term))
+            if document_frequency:
+                reach *= min(1.0, _idf(document_frequency, len(counters)) / ceiling)
+        for extra in extras:
+            expanded[extra] = max(expanded.get(extra, 0.0), reach * weight)
     return expanded
 
 
@@ -463,11 +483,11 @@ def _rank(
 
     if not texts:
         return []
-    weights = _expand(_query_weights(question))
+    bodies = [Counter(_tokenize(text)) for text in texts]
+    weights = _expand(_query_weights(question), bodies)
     if not weights:
         return []
 
-    bodies = [Counter(_tokenize(text)) for text in texts]
     body_lengths = [sum(counter.values()) for counter in bodies]
     body_average = sum(body_lengths) / len(body_lengths)
     scores = _bm25(weights, bodies, body_lengths, body_average, _BM25_B)

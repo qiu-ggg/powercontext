@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -67,12 +68,26 @@ class _PreparedContextEntry:
 class _FragmentCandidate:
     """One literal sentence of one candidate entry, ranked against the query."""
 
-    score: int
+    score: float
     order: int
     address: MemoryEntryAddress
     text: str
     start: int
     end: int
+
+
+@dataclass
+class _Sentence:
+    """A literal sentence together with the entry it was cut from."""
+
+    key: tuple[str, ...]
+    address: MemoryEntryAddress
+    full_text: str
+    start: int
+    end: int
+    order: int
+    terms: frozenset[str] = frozenset()
+    score: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -338,14 +353,16 @@ class PreparedContextBuilder:
     ) -> PreparedContextBuild:
         """Pick literal sentence slices of the candidates under the byte budget.
 
-        Sentences are ranked by how many query terms they carry, then packed in
-        that order while the *rendered* output still fits ``max_bytes``. The
-        budget is measured on the finished document, so citation overhead and
-        the trust envelope are charged before any content is admitted.
+        Sentences are ranked by the inverse-frequency weighted query terms they
+        carry, then packed in that order while the *rendered* output still fits
+        ``max_bytes``. Neighbouring sentences of one entry share a single
+        citation, so a run of them costs only its own text. The budget is
+        measured on the finished document, which charges citation overhead and
+        the trust envelope before any content is admitted.
         """
 
         terms = _query_terms(request.query)
-        candidates: list[_FragmentCandidate] = []
+        sentences: list[_Sentence] = []
         order = 0
         for group in memory_candidates:
             if group.hits and group.memory_ref is None:
@@ -360,39 +377,33 @@ class PreparedContextBuilder:
                     entry_id=hit.entry_id,
                     entry_version_id=hit.entry_version_id,
                 )
-                for raw_start, raw_end in _sentence_spans(hit.text):
-                    start, end = _trim_span(hit.text, raw_start, raw_end)
-                    if end <= start:
+                key = (group.scope_id, hit.entry_id, hit.entry_version_id)
+                for start, end in _sentence_spans(hit.text):
+                    # The raw sentence bounds are kept, whitespace included: a
+                    # caller checking coverage against the original offsets has
+                    # to find every character of the sentence inside a fragment.
+                    if not hit.text[start:end].strip():
                         continue
-                    body = hit.text[start:end]
-                    candidates.append(
-                        _FragmentCandidate(
-                            score=_score_fragment(body, terms),
-                            order=order,
+                    sentences.append(
+                        _Sentence(
+                            key=key,
                             address=address,
-                            text=body,
+                            full_text=hit.text,
                             start=start,
                             end=end,
+                            order=order,
+                            terms=_word_set(hit.text[start:end]),
                         )
                     )
                     order += 1
-        if not candidates:
+        if not sentences:
             return PreparedContextBuild(context=self.empty(), origins=())
 
-        entries: list[_PreparedContextEntry] = []
-        for candidate in sorted(candidates, key=lambda item: (-item.score, item.order)):
-            entry = _PreparedContextEntry(
-                origin=candidate.address,
-                kind="memory",
-                citation=_fragment_citation(candidate.address),
-                content=candidate.text,
-                truncated=False,
-                start=candidate.start,
-                end=candidate.end,
-            )
-            if _rendered_bytes((*entries, entry)) > request.max_bytes:
-                continue
-            entries.append(entry)
+        weights = _term_weights(terms, [sentence.terms for sentence in sentences])
+        for sentence in sentences:
+            sentence.score = sum(weights.get(term, 0.0) for term in sentence.terms & terms)
+
+        entries = _pack_sentences(sentences, max_bytes=request.max_bytes)
         if not entries:
             return PreparedContextBuild(context=self.empty(), origins=())
 
@@ -862,17 +873,48 @@ def _truncate_utf8(text: str, byte_budget: int) -> str:
 
 _WORD_PATTERN = re.compile(r"[a-z]+|\d+")
 _SENTENCE_BREAKS = frozenset(".!?\n\u3002\uff01\uff1f")
+_MIN_FRAGMENT_CHARS = 12
+# Widening a run outwards into sentences the query did not ask about helps when
+# the evidence starts a sentence early, but left unbounded it would spend the
+# whole budget on whatever happens to sit next to the first hit.
+_MAX_FILLER_CHARS = 300
+# Function words carry no claim: they appear in every sentence either way, so
+# keeping them would only flatten the ranking.
+_STOPWORDS = frozenset(
+    """
+    a an and are as at be been but by can could did do does for from had has
+    have he her his how i if in into is it its its may more most no not of on
+    or our she so than that the their them then there these they this to was
+    were we what when which who will with would you your also such between
+    within during over under about
+    """.split()
+)
 
 
 def _query_terms(query: str) -> frozenset[str]:
-    return frozenset(_WORD_PATTERN.findall(query.casefold()))
+    return frozenset(term for term in _WORD_PATTERN.findall(query.casefold()) if term not in _STOPWORDS)
 
 
-def _score_fragment(text: str, terms: frozenset[str]) -> int:
-    if not terms:
-        return 0
-    words = set(_WORD_PATTERN.findall(text.casefold()))
-    return len(words & terms)
+def _word_set(text: str) -> frozenset[str]:
+    return frozenset(_WORD_PATTERN.findall(text.casefold()))
+
+
+def _term_weights(terms: frozenset[str], corpus: Sequence[frozenset[str]]) -> dict[str, float]:
+    """Weight each query term by how much it narrows the candidate sentences.
+
+    A term that shows up in every sentence cannot separate them, so it earns
+    almost nothing; a term carried by a couple of sentences earns the most.
+    """
+
+    total = len(corpus)
+    if not total:
+        return {}
+    weights: dict[str, float] = {}
+    for term in terms:
+        document_frequency = sum(1 for words in corpus if term in words)
+        if document_frequency:
+            weights[term] = math.log(1.0 + total / document_frequency)
+    return weights
 
 
 def _sentence_spans(text: str) -> list[tuple[int, int]]:
@@ -881,12 +923,151 @@ def _sentence_spans(text: str) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     start = 0
     for index, char in enumerate(text):
-        if char in _SENTENCE_BREAKS:
+        if char in _SENTENCE_BREAKS and _break_allowed(text, index):
             spans.append((start, index + 1))
             start = index + 1
     if start < len(text):
         spans.append((start, len(text)))
     return [(start, end) for start, end in spans if end > start]
+
+
+def _break_allowed(text: str, index: int) -> bool:
+    """Keep decimal points and numbered references inside their sentence."""
+
+    previous = text[index - 1] if index else ""
+    following = text[index + 1] if index + 1 < len(text) else ""
+    return not (previous.isdigit() or following.isdigit())
+
+
+def _sentence_entry(sentence: _Sentence) -> _PreparedContextEntry:
+    return _PreparedContextEntry(
+        origin=sentence.address,
+        kind="memory",
+        citation=_fragment_citation(sentence.address),
+        content=sentence.full_text[sentence.start : sentence.end],
+        truncated=False,
+        start=sentence.start,
+        end=sentence.end,
+    )
+
+
+def _touches(entry: _PreparedContextEntry, sentence: _Sentence) -> bool:
+    """Report whether the sentence abuts the entry once whitespace is ignored."""
+
+    start = entry.start if entry.start is not None else 0
+    end = entry.end if entry.end is not None else len(entry.content)
+    if sentence.start <= end and sentence.end >= start:
+        return True
+    low, high = (sentence.end, start) if sentence.end < start else (end, sentence.start)
+    if high <= low:
+        return True
+    return high - low <= 8 and not sentence.full_text[low:high].strip()
+
+
+def _merge_target(entries: Sequence[_PreparedContextEntry], sentence: _Sentence) -> int | None:
+    for index, entry in enumerate(entries):
+        origin = entry.origin
+        if not isinstance(origin, MemoryEntryAddress):
+            continue
+        if (origin.memory.scope_id, origin.entry_id, origin.entry_version_id) != sentence.key:
+            continue
+        if _touches(entry, sentence):
+            return index
+    return None
+
+
+def _pack_sentences(sentences: Sequence[_Sentence], *, max_bytes: int) -> list[_PreparedContextEntry]:
+    """Admit sentence runs until the rendered output would exceed ``max_bytes``.
+
+    The first pass spends a fresh citation only on sentences the query actually
+    asks about, and is repeated while it still admits anything: two sentences
+    that only become neighbours once the text between them is admitted would
+    otherwise stay separate and cost two citations. Leftover budget then closes
+    the gaps inside a run before widening it outwards, because a neighbour
+    costs its own text and nothing else.
+    """
+
+    ranked = sorted(sentences, key=lambda item: (-item.score, item.order))
+    selected: list[_PreparedContextEntry] = []
+    admitted: set[int] = set()
+
+    def fits(entries: Sequence[_PreparedContextEntry]) -> bool:
+        return _rendered_bytes(tuple(entries)) <= max_bytes
+
+    filler = 0
+
+    def admit(sentence: _Sentence, *, allow_new: bool, cap_filler: bool = False) -> bool:
+        nonlocal filler
+        if cap_filler and sentence.score <= 0 and filler + (sentence.end - sentence.start) > _MAX_FILLER_CHARS:
+            return False
+        index = _merge_target(selected, sentence)
+        if index is None:
+            if not allow_new:
+                return False
+            trial = [*selected, _sentence_entry(sentence)]
+        else:
+            trial = list(selected)
+            start = min(trial[index].start, sentence.start)
+            end = max(trial[index].end, sentence.end)
+            trial[index] = replace(trial[index], content=sentence.full_text[start:end], start=start, end=end)
+        if not fits(trial):
+            return False
+        selected[:] = trial
+        admitted.add(sentence.order)
+        if sentence.score <= 0:
+            filler += sentence.end - sentence.start
+        return True
+
+    def sweep(pending: list[_Sentence], *, allow_new: bool, only_gaps: bool = False) -> None:
+        while pending:
+            remaining: list[_Sentence] = []
+            progressed = False
+            for sentence in pending:
+                if only_gaps and not _in_gap(selected, sentence):
+                    remaining.append(sentence)
+                    continue
+                if admit(sentence, allow_new=allow_new, cap_filler=not only_gaps):
+                    progressed = True
+                else:
+                    remaining.append(sentence)
+            if not progressed:
+                return
+            pending = remaining
+
+    asked = [
+        sentence
+        for sentence in ranked
+        if sentence.score > 0 and sentence.end - sentence.start >= _MIN_FRAGMENT_CHARS
+    ]
+    sweep(asked, allow_new=True)
+    if not selected:
+        # An empty collection is a failed answer, so keep the best sentence
+        # even when the query shares no term with any candidate.
+        for sentence in ranked:
+            if admit(sentence, allow_new=True):
+                break
+    leftover = [sentence for sentence in ranked if sentence.order not in admitted]
+    sweep(leftover, allow_new=False, only_gaps=True)
+    leftover = [sentence for sentence in ranked if sentence.order not in admitted]
+    sweep(leftover, allow_new=False)
+    return selected
+
+
+def _in_gap(entries: Sequence[_PreparedContextEntry], sentence: _Sentence) -> bool:
+    """Report whether the sentence sits between two runs of the same entry."""
+
+    left = right = False
+    for entry in entries:
+        origin = entry.origin
+        if not isinstance(origin, MemoryEntryAddress):
+            continue
+        if (origin.memory.scope_id, origin.entry_id, origin.entry_version_id) != sentence.key:
+            continue
+        if entry.end is not None and entry.end <= sentence.start:
+            left = True
+        if entry.start is not None and entry.start >= sentence.end:
+            right = True
+    return left and right
 
 
 def _trim_span(text: str, start: int, end: int) -> tuple[int, int]:
