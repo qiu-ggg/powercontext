@@ -19,9 +19,12 @@ identity is derived from the document id, the SHA-256 of the whole input file an
 the 1-based physical page number, so a citation resolves to exactly one page of
 exactly one revision of the file even after the document is re-issued.
 
-Retrieval is offline: the pages are ranked locally with BM25 over the Memory
-entry bodies, boosted by the section headings printed on each page and by
-adjacency of query terms, and only real Memory citations are returned.
+Retrieval is offline. Pages are ranked locally with BM25 over the Memory entry
+bodies, widened by the financial vocabulary the question's concepts imply
+(:mod:`powercontext.sources.pdf_concepts`), boosted by the section titles printed
+on each page and by adjacency of query terms, with a small prior toward pages
+that print a primary financial statement. Only real Memory citations are
+returned.
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from powercontext.sources.models import (
     SourceMaterialization,
     _validate_reference_part,
 )
+from powercontext.sources.pdf_concepts import CONCEPT_SOURCE
 from powercontext.sources.projections import TEXT_EVIDENCE_PROJECTION_KEY, TextEvidence
 
 PDF_PAGE_SOURCE_NAME = "pdf-page"
@@ -114,6 +118,37 @@ _HEADING_B = 0.4
 _SECONDARY_WEIGHT = 0.3
 #: Weight of an adjacent query-term pair that also occurs adjacently on the page.
 _PHRASE_WEIGHT = 0.2
+#: Weight of a concept expansion term relative to a term the question actually
+#: used. It has to be well below 1.0: the expansion is a guess about vocabulary,
+#: the question is not.
+_CONCEPT_WEIGHT = 0.45
+#: A question that asks for a financial metric is answered by a primary
+#: statement far more often than by a narrative page, so pages carrying a
+#: statement title receive a fraction of the top page score as a bonus.
+_STATEMENT_WEIGHT = 0.2
+
+_STATEMENT_PATTERN = re.compile(
+    r"consolidated\s+(statement|balance|statements)\s+of\s+"
+    r"(income|operation|earning|cash|financial|comprehensive|shareholder|stockholder|change)",
+    re.IGNORECASE,
+)
+
+
+def _concept_index() -> dict[str, frozenset[str]]:
+    """Flatten the lexicon into ``trigger token -> expansion tokens``."""
+
+    index: dict[str, set[str]] = {}
+    for triggers, expansions in CONCEPT_SOURCE.items():
+        terms = {
+            token
+            for token in _tokenize(expansions)
+            if token not in _STOPWORDS and token not in _INSTRUCTION_WORDS
+        }
+        if not terms:
+            continue
+        for trigger in triggers.split():
+            index.setdefault(_stem(trigger), set()).update(terms)
+    return {trigger: frozenset(terms) for trigger, terms in index.items()}
 
 
 class PDFDocumentInput(BaseModel):
@@ -321,6 +356,57 @@ def _query_weights(question: str) -> dict[str, float]:
     return weights
 
 
+_CONCEPTS = _concept_index()
+
+
+def _concept_terms(term: str) -> frozenset[str]:
+    """Return the expansion for one question term.
+
+    The lexicon is keyed by stemmed trigger words, but a stemmer cannot make
+    ``retirees`` and ``retirement`` land on the same key, so a prefix match of at
+    least four characters is accepted as well. Short words are excluded because
+    a four-letter prefix is already the point where finance vocabulary stops
+    being ambiguous.
+    """
+
+    exact = _CONCEPTS.get(term)
+    if exact is not None:
+        return exact
+    if len(term) < 4:
+        return frozenset()
+    merged: set[str] = set()
+    for trigger, terms in _CONCEPTS.items():
+        if len(trigger) < 4:
+            continue
+        if trigger.startswith(term):
+            merged |= terms
+    return frozenset(merged)
+
+
+def _expand(weights: dict[str, float]) -> dict[str, float]:
+    """Add the accounting vocabulary that the question's concepts imply.
+
+    The expansion never overrides a term the question already used: a question
+    that says "revenue" keeps weight 1.0 even if "revenue" is also an expansion
+    term for "gross".
+    """
+
+    if not _CONCEPTS:
+        return weights
+    expanded = dict(weights)
+    for term in weights:
+        for extra in _concept_terms(term):
+            expanded[extra] = max(expanded.get(extra, 0.0), _CONCEPT_WEIGHT)
+    return expanded
+
+
+def _is_statement_page(title: str) -> bool:
+    """True when the page prints one of the four primary statements."""
+
+    lowered = title.lower()
+    return bool(_STATEMENT_PATTERN.search(lowered)) or "consolidated balance sheet" in lowered
+
+
 def _query_phrases(question: str) -> list[tuple[str, str]]:
     primary, _ = _split_question(question)
     sequence = _tokenize(primary)
@@ -369,15 +455,15 @@ def _rank(
 ) -> list[int]:
     """Return entry positions ordered by relevance to the question.
 
-    Three lexical signals are combined, because no single one is enough on a
-    10-K: the page body, the section headings printed on the page, and adjacency
-    of query terms. Scores are only compared inside one signal family, so the
-    body score dominates and the heading and phrase terms act as tie-breakers.
+    Four signals are combined, because no single one is enough on a 10-K: the
+    page body, the section titles printed on the page, adjacency of query terms,
+    and whether the page prints a primary financial statement. The body score
+    dominates; the other three break the ties that a bag of words cannot.
     """
 
     if not texts:
         return []
-    weights = _query_weights(question)
+    weights = _expand(_query_weights(question))
     if not weights:
         return []
 
@@ -393,23 +479,32 @@ def _rank(
     heading_scores = _bm25(
         weights, heading_counters, heading_lengths, heading_average, _HEADING_B
     )
-    scores = [body + _HEADING_WEIGHT * heading for body, heading in zip(scores, heading_scores, strict=True)]
+    scores = [
+        body + _HEADING_WEIGHT * heading
+        for body, heading in zip(scores, heading_scores, strict=True)
+    ]
 
     pairs = _query_phrases(question)
     if pairs:
         page_pairs = [_bigrams(_tokenize(text)) for text in texts]
         every_pair = [pair for pairs_on_page in page_pairs for pair in pairs_on_page]
-        pair_idf = [
-            _idf(every_pair.count(pair), len(every_pair)) for pair in pairs
-        ]
+        pair_idf = [_idf(every_pair.count(pair), len(every_pair)) for pair in pairs]
         for index, pairs_on_page in enumerate(page_pairs):
             bonus = sum(
-                weight for pair, weight in zip(pairs, pair_idf, strict=True) if pair in pairs_on_page
+                weight
+                for pair, weight in zip(pairs, pair_idf, strict=True)
+                if pair in pairs_on_page
             )
             if bonus:
                 scores[index] += _PHRASE_WEIGHT * bonus
 
     ordered = [(score, index) for index, score in enumerate(scores) if score > 0.0]
+    if ordered and _STATEMENT_WEIGHT:
+        bonus = _STATEMENT_WEIGHT * max(score for score, _ in ordered)
+        ordered = [
+            (score + bonus if _is_statement_page(titles[index]) else score, index)
+            for score, index in ordered
+        ]
     # Ties fall back to page order, which keeps the result deterministic.
     ordered.sort(key=lambda item: (-item[0], item[1]))
     return [index for _, index in ordered]
