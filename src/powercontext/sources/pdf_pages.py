@@ -512,6 +512,161 @@ def _strip_document_ids(texts: Sequence[str]) -> list[str]:
     return stripped
 
 
+#: Parts of a document id that name the filing rather than the company.
+_DOCUMENT_ID_NOISE = frozenset(
+    {
+        "10", "10k", "8k", "fy", "form", "annual", "report", "the", "inc", "corp", "corporation",
+        "co", "company", "ltd", "plc", "sa", "ag", "nv", "se", "group", "holdings", "and",
+    }
+)
+
+
+def _entry_document_ids(texts: Sequence[str]) -> list[str]:
+    """Return the document id each entry belongs to, or "" when it is unknown.
+
+    The projection writes ``DOCUMENT_ID\\nPAGE_TEXT``, so the id is the first line
+    and it repeats once per page of that filing. A line that repeats is therefore
+    a document id; anything else is page text and is left unlabelled.
+    """
+
+    heads = [text.split("\n", 1)[0].strip() for text in texts]
+    counts = Counter(head for head in heads if head and not any(c.isspace() for c in head))
+    repeated = {head for head, count in counts.items() if count > 1}
+    return [head if head in repeated else "" for head in heads]
+
+
+def _document_words(document_id: str) -> list[str]:
+    """Return the words of a document id that name the company, not the filing."""
+
+    return [
+        word
+        for word in re.findall(r"[a-z0-9]+", document_id.lower())
+        if word not in _DOCUMENT_ID_NOISE and not re.fullmatch(r"(?:19|20)\d{2}", word)
+    ]
+
+
+def _document_keys(document_id: str) -> frozenset[str]:
+    """Return the spellings a question may use for one document's company.
+
+    A filing is named after its company plus the period, so the year and the
+    "10-K" markers are dropped. Both the joined name and its initials are kept:
+    questions write "Johnson & Johnson" as "JnJ", which only the initials can
+    catch.
+    """
+
+    words = _document_words(document_id)
+    if not words:
+        return frozenset()
+    keys = {word for word in words if len(word) >= 3}
+    joined = "".join(words)
+    if len(joined) >= 2:
+        keys.add(joined)
+    if 2 <= len(words) <= 4:
+        initials = "".join(word[0] for word in words)
+        keys.add(initials)
+        # "Johnson & Johnson" -> "JnJ": the connector keeps its own initial.
+        keys.add("n".join(word[0] for word in words))
+    return frozenset(keys)
+
+
+def _spells_out(token: str, name: str) -> bool:
+    """True when ``token`` reads as letters picked out of ``name`` in order.
+
+    "AMEX" is how questions refer to "AMERICANEXPRESS", and no word boundary
+    separates the two: only the sequence of its letters connects them.
+    """
+
+    if not (3 <= len(token) <= 6) or not token.isalpha() or not name:
+        return False
+    if token[0] != name[0]:
+        return False
+    remaining = iter(name)
+    return all(character in remaining for character in token)
+
+
+def _question_years(question: str) -> set[int]:
+    """Return the fiscal years a question names, as four digit years."""
+
+    years = {2000 + int(match.group(1)) for match in re.finditer(r"\bfy\s?'?(\d{2})\b", question, re.I)}
+    years.update(int(match.group(1)) for match in re.finditer(r"\b((?:19|20)\d{2})\b", question))
+    return years
+
+
+def _focus_documents(question: str, document_ids: Sequence[str]) -> frozenset[str]:
+    """Return the documents the question is about, or an empty set when unsure.
+
+    A fetched Memory may hold several filings at once, and a question about one
+    of them is easily outranked by a page of another: every 10-K talks about
+    revenue, liquidity and risk. The company the question names is the one
+    reliable filter, so the lookup only commits when a document id matches it.
+    """
+
+    tokens = set(re.findall(r"[a-z0-9]+", question.lower()))
+    # Filing ids squeeze multi-word names together ("AMERICANEXPRESS"), while a
+    # question keeps the words apart, so the splice is searched as well.
+    spliced = "".join(re.findall(r"[a-z0-9]+", question.lower()))
+    candidates = {document_id for document_id in document_ids if document_id}
+    matches = {
+        document_id
+        for document_id in candidates
+        if _document_keys(document_id) & tokens
+        or any(len(key) >= 6 and key in spliced for key in _document_keys(document_id))
+    }
+    if not matches:
+        # Nothing is spelled the way the question spells it, so fall back to the
+        # letter sequence, and only when exactly one filing answers to it.
+        spelled = {
+            document_id
+            for document_id in candidates
+            if any(
+                _spells_out(token, "".join(_document_words(document_id))) for token in tokens
+            )
+        }
+        if len(spelled) == 1:
+            matches = spelled
+    if not matches:
+        return frozenset()
+    years = _question_years(question)
+    if years:
+        dated = {
+            document_id
+            for document_id in matches
+            if {int(year) for year in re.findall(r"(?:19|20)\d{2}", document_id)} & years
+        }
+        if dated:
+            matches = dated
+    return frozenset(matches)
+
+
+#: Weight of the region pass. A question about where a company operates is
+#: answered by the page that enumerates its geographies, which repeats no term
+#: from the question at all: only the place names tie the two together.
+_REGION_WEIGHT = 2.0
+_REGION_DEPTH = 20
+_REGION_QUESTION = re.compile(
+    r"geograph|geographic|regions?\b|countr(y|ies)|territor|worldwide|footprint", re.I
+)
+_REGION_TERMS = re.compile(
+    r"north america|latin america|south america|central america|europe|european|asia|asian|"
+    r"africa|african|middle east|china|chinese|india|japan|korea|russia|brazil|mexico|canada|"
+    r"united kingdom|germany|france|italy|spain|australia|new zealand|apac|amesa|emea",
+    re.I,
+)
+
+
+def _is_region_question(question: str) -> bool:
+    return bool(_REGION_QUESTION.search(question))
+
+
+def _region_order(texts: Sequence[str]) -> list[int]:
+    """Order pages by how many places they name."""
+
+    scored = [(len(_REGION_TERMS.findall(text)), index) for index, text in enumerate(texts)]
+    scored = [item for item in scored if item[0]]
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [index for _, index in scored]
+
+
 def _numeric_density(text: str) -> float:
     """Share of tokens that are digits: primary statements are dense, prose is not."""
 
@@ -681,6 +836,9 @@ def _rank_scores(
             _coverage_order(weights, bodies, texts)[:_COVERAGE_DEPTH], 1
         ):
             fused[index] = fused.get(index, 0.0) + _COVERAGE_WEIGHT / (_FUSION_DAMPING + rank)
+    if _REGION_WEIGHT and _is_region_question(question):
+        for rank, index in enumerate(_region_order(texts)[:_REGION_DEPTH], 1):
+            fused[index] = fused.get(index, 0.0) + _REGION_WEIGHT / (_FUSION_DAMPING + rank)
     return fused
 
 
@@ -705,10 +863,20 @@ async def search_pdf_pages(
     if not records:
         return ()
 
-    fused, _, _ = _rank_parts(tuple(record.entry.text for record in records), query)
+    texts = [record.entry.text for record in records]
+    document_ids = _entry_document_ids(texts)
+    focus = _focus_documents(query, document_ids)
+    positions = [
+        index for index, document_id in enumerate(document_ids) if document_id in focus
+    ] if focus else []
+    if positions and len(positions) < len(records):
+        subset = tuple(texts[index] for index in positions)
+        order = [positions[position] for position in _rank(subset, query)]
+    else:
+        order = _rank(tuple(texts), query)
 
     citations: list[MemoryCitation] = []
-    for index in _ordered(fused):
+    for index in order:
         citation = records[index].citation
         if citation in citations:
             continue
