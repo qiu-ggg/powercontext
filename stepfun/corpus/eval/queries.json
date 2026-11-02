@@ -1,0 +1,206 @@
+[
+  {
+    "id": "q01",
+    "query": "WebGPU 初始化失败时应用应该怎么处理",
+    "gold": [
+      "01-webgpu-browser-inference.md",
+      "16-onnx-runtime-web.md"
+    ]
+  },
+  {
+    "id": "q02",
+    "query": "WASM 多线程为什么需要跨域隔离",
+    "gold": [
+      "02-wasm-simd-threads.md",
+      "20-performance-measurement.md"
+    ]
+  },
+  {
+    "id": "q03",
+    "query": "BERT 的句向量是怎么得到的",
+    "gold": [
+      "03-bert-encoder.md",
+      "04-embedding-similarity.md"
+    ]
+  },
+  {
+    "id": "q04",
+    "query": "余弦相似度和内积有什么区别",
+    "gold": [
+      "04-embedding-similarity.md"
+    ]
+  },
+  {
+    "id": "q05",
+    "query": "HNSW 的 ef_construction 参数有什么用",
+    "gold": [
+      "05-hnsw-index.md",
+      "24-dimension-recall.md"
+    ]
+  },
+  {
+    "id": "q06",
+    "query": "INT8 量化后的模型体积能压缩多少",
+    "gold": [
+      "06-quantization.md",
+      "17-model-caching.md"
+    ]
+  },
+  {
+    "id": "q07",
+    "query": "BM25 为什么对长文档不利",
+    "gold": [
+      "07-bm25-fulltext.md"
+    ]
+  },
+  {
+    "id": "q08",
+    "query": "中文全文索引怎么选分词器",
+    "gold": [
+      "08-chinese-analyzer.md",
+      "07-bm25-fulltext.md"
+    ]
+  },
+  {
+    "id": "q09",
+    "query": "RRF 是怎么把两路检索结果融合的",
+    "gold": [
+      "09-hybrid-rrf.md",
+      "19-retrieval-metrics.md"
+    ]
+  },
+  {
+    "id": "q10",
+    "query": "混合检索为什么必须在数据库里完成融合",
+    "gold": [
+      "09-hybrid-rrf.md",
+      "14-mysql-compatibility.md"
+    ]
+  },
+  {
+    "id": "q11",
+    "query": "文档分块大小和重叠应该怎么设置",
+    "gold": [
+      "10-chunking.md",
+      "21-batching-throughput.md"
+    ]
+  },
+  {
+    "id": "q12",
+    "query": "RAG 的检索和生成应该分别怎么评估",
+    "gold": [
+      "11-rag-pipeline.md",
+      "19-retrieval-metrics.md"
+    ]
+  },
+  {
+    "id": "q13",
+    "query": "seekdb 和普通向量数据库有什么不同",
+    "gold": [
+      "12-seekdb-overview.md",
+      "14-mysql-compatibility.md"
+    ]
+  },
+  {
+    "id": "q14",
+    "query": "seekdb 嵌入式模式和服务器模式怎么选",
+    "gold": [
+      "13-deployment-modes.md",
+      "23-multi-collection-state.md"
+    ]
+  },
+  {
+    "id": "q15",
+    "query": "怎么在浏览器里用 ONNX 模型做文本向量化",
+    "gold": [
+      "15-transformers-js.md",
+      "16-onnx-runtime-web.md"
+    ]
+  },
+  {
+    "id": "q16",
+    "query": "模型首次加载很慢有什么优化办法",
+    "gold": [
+      "17-model-caching.md",
+      "20-performance-measurement.md"
+    ]
+  },
+  {
+    "id": "q17",
+    "query": "端侧推理怎么保证文档不离开设备",
+    "gold": [
+      "18-privacy-edge.md",
+      "01-webgpu-browser-inference.md"
+    ]
+  },
+  {
+    "id": "q18",
+    "query": "Recall@K 和 nDCG@K 分别衡量什么",
+    "gold": [
+      "19-retrieval-metrics.md"
+    ]
+  },
+  {
+    "id": "q19",
+    "query": "怎么测量用户从点击搜索到看到结果的延迟",
+    "gold": [
+      "20-performance-measurement.md",
+      "22-index-refresh.md"
+    ]
+  },
+  {
+    "id": "q20",
+    "query": "批量嵌入时批大小越大越好吗",
+    "gold": [
+      "21-batching-throughput.md",
+      "10-chunking.md"
+    ]
+  },
+  {
+    "id": "q21",
+    "query": "导入完成但搜不到新文档是什么原因",
+    "gold": [
+      "22-index-refresh.md",
+      "05-hnsw-index.md"
+    ]
+  },
+  {
+    "id": "q22",
+    "query": "多个知识库之间怎么做状态隔离",
+    "gold": [
+      "23-multi-collection-state.md",
+      "18-privacy-edge.md"
+    ]
+  },
+  {
+    "id": "q23",
+    "query": "降低向量维度会影响检索效果吗",
+    "gold": [
+      "24-dimension-recall.md",
+      "06-quantization.md"
+    ]
+  },
+  {
+    "id": "q24",
+    "query": "HNSW 查询时的 ef_search 如何影响召回",
+    "gold": [
+      "05-hnsw-index.md",
+      "24-dimension-recall.md"
+    ]
+  },
+  {
+    "id": "q25",
+    "query": "IK 分词器的 smart 模式和 max_word 模式区别",
+    "gold": [
+      "08-chinese-analyzer.md"
+    ]
+  },
+  {
+    "id": "q26",
+    "query": "怎么判断混合检索比单路检索更好",
+    "gold": [
+      "09-hybrid-rrf.md",
+      "19-retrieval-metrics.md"
+    ]
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "ts": "2026-11-02T08:14:52.777Z",
+  "device": "wasm",
+  "dtype": "int8",
+  "textCount": 48,
+  "results": [
+    {
+      "batchSize": 1,
+      "throughput": 19.9,
+      "ms": "2.41 s"
+    },
+    {
+      "batchSize": 8,
+      "throughput": 12.6,
+      "ms": "3.82 s"
+    },
+    {
+      "batchSize": 16,
+      "throughput": 11.5,
+      "ms": "4.17 s"
+    },
+    {
+      "batchSize": 32,
+      "throughput": 11.2,
+      "ms": "4.30 s"
+    }
+  ]
+}

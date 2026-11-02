@@ -1,0 +1,13 @@
+{
+  "ts": "2026-11-02T08:04:42.816Z",
+  "device": "webgpu",
+  "dtype": "fp16",
+  "embedMs": 362.71499997377396,
+  "addMs": 101.48149999999441,
+  "refreshMs": 827.440499999997,
+  "ingestTotalMs": 940.546399999992,
+  "e2eMs": 1322.2699999809265,
+  "chunkCount": 1,
+  "batchSize": 32,
+  "refreshPolicy": "end"
+}

@@ -1,0 +1,32 @@
+{
+  "name": "stepfun-edge-kb",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-side embedding + seekdb hybrid retrieval mini knowledge base",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c green,cyan \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm --workspace server run dev",
+    "dev:web": "npm --workspace web run dev",
+    "build": "npm --workspace web run build",
+    "start": "npm --workspace server run start",
+    "setup": "node scripts/fetch-model.mjs && node scripts/copy-wasm.mjs",
+    "setup:seekdb": "node scripts/seekdb-server.mjs",
+    "fetch-model": "node scripts/fetch-model.mjs",
+    "copy-wasm": "node scripts/copy-wasm.mjs",
+    "postinstall": "node scripts/copy-wasm.mjs",
+    "eval:browser": "node scripts/run-eval-cdp.mjs",
+    "verify:fallback": "node scripts/verify-fallback.mjs",
+    "check": "npm --workspace web run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

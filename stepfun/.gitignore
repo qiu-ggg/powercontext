@@ -1,0 +1,14 @@
+node_modules/
+web/dist/
+web/public/wasm/
+web/public/models/
+.seekdb_base/
+.seekdb_data/
+backend/seekdb/
+backend/data*/
+backend/*.exe
+results/*.part
+*.log
+.DS_Store
+data/
+*.tsbuildinfo

@@ -1,0 +1,135 @@
+{
+  "meta": {
+    "generatedAt": "2026-11-02T08:30:00Z",
+    "app": "stepfun-edge-kb",
+    "commit": "worktree",
+    "note": "All numbers measured in the browser build served by this repo; no server-side embedding or precomputed vectors."
+  },
+  "environment": {
+    "os": "Windows 10.0.26200 x64",
+    "browser": "Microsoft Edge 156.0.4314.50",
+    "node": "24.18.0",
+    "seekdb": "5.7.25-OceanBase seekdb-v1.4.0.0",
+    "gpu": "NVIDIA Blackwell (WebGPU adapter, shader-f16=true)",
+    "logicalCores": 28,
+    "crossOriginIsolated": true,
+    "model": "Xenova/bge-small-zh-v1.5 (BAAI/bge-small-zh-v1.5 ONNX), 512 dim, CLS pooling + L2 normalize",
+    "corpus": { "documents": 24, "chunks": 48, "queries": 26, "chunking": "360 chars target / 60 overlap" },
+    "harness": {
+      "topK": 10,
+      "recallAt": 5,
+      "ndcgAt": 5,
+      "rrf": { "rankConstant": 60, "rankWindowSize": 40, "knnK": 20 },
+      "aggregation": "mean over 26 queries; latencies are medians inside each run"
+    }
+  },
+  "modelSizes": {
+    "fp32": { "file": "onnx/model.onnx", "bytes": 94851877, "ratio": 1.0 },
+    "fp16": { "file": "onnx/model_fp16.onnx", "bytes": 47497427, "ratio": 1.997 },
+    "int8": { "file": "onnx/model_int8.onnx", "bytes": 23903394, "ratio": 3.968 },
+    "q8": { "file": "onnx/model_quantized.onnx", "bytes": 24010842, "ratio": 3.95 },
+    "tokenizerBytes": 549873
+  },
+  "evalRuns": [
+    {
+      "backend": "webgpu-fp16",
+      "device": "webgpu",
+      "dtype": "fp16",
+      "source": "results/eval_webgpu_fp16_mvyziy6y.json",
+      "loadMs": 826.81,
+      "coldMs": 62.99,
+      "embedChunksMs": 204.13,
+      "chunkThroughput": 235.14,
+      "queryEmbedMs": 9.75,
+      "dbMs": 6.27,
+      "e2eMs": 19.78,
+      "quality": { "recall5": 0.8077, "ndcg5": 0.7941, "mrr": 0.9423 }
+    },
+    {
+      "backend": "wasm-int8",
+      "device": "wasm",
+      "dtype": "int8",
+      "source": "results/eval_wasm_int8_mvyzg5rl.json",
+      "loadMs": 531.96,
+      "coldMs": 8.98,
+      "embedChunksMs": 3974.05,
+      "chunkThroughput": 12.08,
+      "queryEmbedMs": 5.1,
+      "dbMs": 6.71,
+      "e2eMs": 15.41,
+      "quality": { "recall5": 0.8654, "ndcg5": 0.8073, "mrr": 0.9231 }
+    },
+    {
+      "backend": "wasm-fp32",
+      "device": "wasm",
+      "dtype": "fp32",
+      "source": "results/eval_wasm_fp32_mvyzhkgj.json",
+      "loadMs": 1174.66,
+      "coldMs": 52.2,
+      "embedChunksMs": 5568.62,
+      "chunkThroughput": 8.62,
+      "queryEmbedMs": 7.39,
+      "dbMs": 7.01,
+      "e2eMs": 18.23,
+      "quality": { "recall5": 0.8077, "ndcg5": 0.7941, "mrr": 0.9423 }
+    },
+    {
+      "backend": "wasm-q8 (archived A/B)",
+      "device": "wasm",
+      "dtype": "q8",
+      "source": "results/eval_wasm_q8_mvyz68d6.json",
+      "loadMs": 591.78,
+      "coldMs": 30.06,
+      "embedChunksMs": 6514.38,
+      "chunkThroughput": 7.37,
+      "queryEmbedMs": 8.93,
+      "dbMs": 8.23,
+      "e2eMs": 20.24,
+      "quality": { "recall5": 0.75, "ndcg5": 0.7548, "mrr": 0.9231 }
+    }
+  ],
+  "batchBenchmarks": {
+    "chunks": 48,
+    "unit": "chunks/second",
+    "runs": {
+      "webgpu-fp16": { "1": 103.52, "8": 323.78, "16": 326.13, "32": 363.55 },
+      "wasm-int8": { "1": 19.91, "8": 12.55, "16": 11.51, "32": 11.17 },
+      "wasm-fp32": { "1": 15.01, "8": 9.56, "16": 9.01, "32": 8.78 },
+      "wasm-q8": { "1": 12.87, "8": 8.06, "16": 7.82, "32": 7.6 }
+    }
+  },
+  "ingest": {
+    "corpus": {
+      "source": "results/ingest_webgpu_fp16_1793607572687.json",
+      "chunks": 48,
+      "batchSize": 32,
+      "refreshPolicy": "end",
+      "embedMs": 149.04,
+      "addMs": 154.44,
+      "refreshMs": 814.72,
+      "ingestTotalMs": 1051.68,
+      "e2eMs": 1247.21
+    },
+    "singleChunk": {
+      "source": "results/ingest_webgpu_fp16_1793606682816.json",
+      "chunks": 1,
+      "batchSize": 32,
+      "refreshPolicy": "end",
+      "embedMs": 362.71,
+      "addMs": 101.48,
+      "refreshMs": 827.44,
+      "ingestTotalMs": 940.55,
+      "e2eMs": 1322.27
+    }
+  },
+  "fallback": {
+    "source": "results/fallback-verification.json",
+    "navigatorGpu": "requestAdapter() -> null",
+    "selectedBackend": "WASM INT8",
+    "note": "requestAdapter() 返回空（无可用 GPU 适配器），自动降级到 WASM INT8",
+    "firstSearch": { "embedMs": 10.0, "dbMs": 5.8, "e2eMs": 26.4 },
+    "warmSearch": { "embedMs": 6.5, "dbMs": 6.7, "e2eMs": 25.8 },
+    "hits": 1,
+    "hybridMode": true
+  }
+}
