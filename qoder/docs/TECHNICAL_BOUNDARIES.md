@@ -112,6 +112,7 @@ curl http://127.0.0.1:5000/api/analytics/demo_user
 ```
 步骤 2/3: 初始化 PowerContext...
   后端: remote (API v1.4（PowerContext Server 1.4.1）)
+  ✓ 已清理 demo_user 的旧记忆 (6 条)
   ✓ 用户偏好已保存
   ✓ 学习进度已保存 (3 篇文档)
   ✓ 搜索历史已保存 (3 条)

@@ -652,6 +652,12 @@ Qoder: 可能的原因：
 
 **实测**：`init_db.py` 在 remote 模式下完成 12 篇文档、6 条记忆、6 条召回；`/api/health` 返回 `mode: remote`、`version: 1.1.1`；`/api/stats` 返回 200。
 
+### 13.5 重复初始化与 Windows 控制台
+
+- 远程记忆是追加模型，重复执行 `init_db.py` 会把搜索历史和学习时长累加（实测从 3 次 / 6200 秒变成 6 次 / 12400 秒）。新增 `reset_user()`：初始化前通过 `/v1/atomic-memory/lifecycle` 停用 `demo_user` 的全部旧记忆，保证每次初始化结果一致。
+- Windows 控制台默认 GBK，脚本打印 `✓`/`✗` 会抛 `UnicodeEncodeError`。在 `init_db.py` 开头把 stdout/stderr 重设为 UTF-8，仅在解释器支持时执行。
+- 连续执行两次初始化验证：均清理 6 条旧记忆，最终稳定为 4 篇已浏览、3 次搜索、6200 秒。
+
 ---
 
 ## 附录

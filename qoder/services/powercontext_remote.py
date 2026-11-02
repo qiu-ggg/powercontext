@@ -187,6 +187,44 @@ class RemotePowerContextClient:
         })
         return True
 
+    def reset(self, user_id):
+        """停用该用户的全部活动记忆，返回停用条数（用于初始化前清空演示数据）"""
+        scope_id = self.ensure_scope(user_id)
+        forgotten = 0
+        for entry in self._list_entries(user_id):
+            artifact = self._artifact(entry)
+            if not artifact.get('artifact_id'):
+                continue
+            target = {
+                'artifact': artifact,
+                'state_version': entry.get('state_version', 0),
+            }
+            payload = {
+                'scope_id': scope_id,
+                'target': target,
+                'state': 'forgotten',
+            }
+            try:
+                self._request('POST', '/v1/atomic-memory/lifecycle', payload)
+                forgotten += 1
+            except PowerContextRemoteError as e:
+                if getattr(e, 'status', None) != 409:
+                    continue
+                # 状态版本冲突：重新读取后再试一次
+                fresh = self._pick_entry(self._list_entries(user_id), entry.get('kind'))
+                if not fresh:
+                    continue
+                payload['target'] = {
+                    'artifact': self._artifact(fresh),
+                    'state_version': fresh.get('state_version', 0),
+                }
+                try:
+                    self._request('POST', '/v1/atomic-memory/lifecycle', payload)
+                    forgotten += 1
+                except PowerContextRemoteError:
+                    continue
+        return forgotten
+
     def search(self, user_id, query, limit=10):
         """调用真实 PowerContext 的 Memory 搜索（服务端 FTS/向量）"""
         scope_id = self.ensure_scope(user_id)

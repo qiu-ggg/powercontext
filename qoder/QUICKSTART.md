@@ -37,7 +37,7 @@ python -m pip install -r requirements.txt
 python init_db.py
 ```
 
-会创建 `data/seekdb.db`（SQLite + FTS5 检索层）并导入 12 篇示例文档，同时把偏好、学习进度、搜索历史与浏览记录写入真实 PowerContext 服务。
+会创建 `data/seekdb.db`（SQLite + FTS5 检索层）并导入 12 篇示例文档，同时把偏好、学习进度、搜索历史与浏览记录写入真实 PowerContext 服务。脚本会先停用 `demo_user` 的旧记忆，因此可以重复执行而不会让统计数字累加。
 
 ## 4. 启动应用
 

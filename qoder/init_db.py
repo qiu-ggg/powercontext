@@ -1,11 +1,16 @@
 """
 数据库初始化脚本
-创建 seekdb (SQLite + FTS5) 和 PowerContext (SQLite) 所需的表结构
-并插入示例数据
+创建 seekdb (SQLite + FTS5) 的表结构并插入示例数据，
+同时把示例记忆写入当前可用的 PowerContext 后端（默认真实远程服务）
 """
 
 import os
 import sys
+
+# Windows 控制台默认 GBK，打印 ✓/✗ 会抛 UnicodeEncodeError，这里统一切到 UTF-8
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, 'reconfigure'):
+        stream.reconfigure(encoding='utf-8', errors='replace')
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -129,6 +134,9 @@ def init_powercontext():
         pc = PowerContextService(db_path)
 
     demo_user = 'demo_user'
+    if pc.is_remote:
+        cleared = pc.reset_user(demo_user)
+        print(f"  ✓ 已清理 {demo_user} 的旧记忆 ({cleared} 条)")
 
     pc.save_user_preferences(demo_user, {
         'interests': '人工智能,数据库,Web开发',

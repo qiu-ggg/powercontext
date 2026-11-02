@@ -152,6 +152,7 @@ SmartKnowledgeHub/
 - 相关文档被记为搜索、出现重复历史：相关推荐请求改为 `record=0`；相同查询 30 秒内只保留一条
 - 技术真实性：检索层如实标注为「SQLite FTS5 兼容检索层」，展示页标注为静态快照；默认模式改为 `remote`，服务不可达直接报错
 - PowerContext 1.4.1：二次保存改用原子记忆 PUT + `If-Match` 修订号，停用改用 lifecycle，不再依赖旧 citation 响应结构
+- 重复初始化：远程记忆是追加模型，初始化前先停用 `demo_user` 旧记忆，避免搜索次数与学习时长累加；同时修复 Windows GBK 控制台下打印 `✓` 报错的问题
 
 ## Qoder 开发证据
 

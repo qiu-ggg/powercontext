@@ -261,6 +261,36 @@ class PowerContextService:
         finally:
             conn.close()
 
+    def reset_user(self, user_id):
+        """停用用户的全部记忆，返回停用条数；用于初始化前清理演示数据"""
+        if self.is_remote:
+            try:
+                return self._remote_client.reset(user_id)
+            except PowerContextRemoteError as e:
+                print(f"PowerContext 远程清理失败: {e}")
+                return 0
+
+        conn = self._get_conn()
+        try:
+            rows = conn.execute(
+                """SELECT COUNT(*) AS n FROM atomic_memory
+                   WHERE scope_id = ? AND lifecycle = 'active'""",
+                (user_id,)
+            ).fetchone()
+            conn.execute(
+                """UPDATE atomic_memory SET lifecycle = 'forgotten',
+                   updated_at = datetime('now', 'localtime')
+                   WHERE scope_id = ? AND lifecycle = 'active'""",
+                (user_id,)
+            )
+            conn.commit()
+            return rows['n'] if rows else 0
+        except Exception as e:
+            print(f"清理记忆出错: {e}")
+            return 0
+        finally:
+            conn.close()
+
     def get_all_memories(self, user_id):
         """
         获取用户的所有活跃记忆 - 对应 PowerContext 的 List Atomic Memory
