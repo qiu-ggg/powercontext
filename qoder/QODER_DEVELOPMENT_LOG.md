@@ -583,6 +583,40 @@ Qoder: 可能的原因：
 
 ---
 
+## 十二、验收补强（2026-11-03）
+
+按最新验收意见补齐证据与运行约束。
+
+### 12.1 Qoder 开发过程证据
+
+- 新增 `docs/qoder-sessions/`：需求拆解、编码实现、调试排错三类截图，附可核对的 HTML 原文。
+- 截图内容来自本机 Qoder 会话记录，保留真实决策与报错，移除令牌等敏感信息。
+- 展示页新增「Qoder 对话证据」区块并重新发布。
+
+### 12.2 真实调用日志
+
+- 新增 `tools/capture_powercontext_log.py`，直接请求真实服务并记录原始请求/响应。
+- 日志：`docs/logs/powercontext-calls-2026-11-03.log`，覆盖 `/v1/scopes`、`/v1/memory/remember`、`/v1/memory/search`、`/v1/context/prepare`、`/v1/memory/entries/retire`、`/v1/memory/entries/list`。
+- 实测作用域 `scp_1grbwtytbjp9ejqwnd4pw6d7gx`；搜索返回 `mode: "fts"`；retire 后状态为 `inactive`。
+
+### 12.3 运行约束调整
+
+- `POWERCONTEXT_MODE` 默认值由 `auto` 改为 `remote`；服务不可达时直接报错，不再静默回退。
+- `RUNNING.md` 第 3 节改为「必选」，`local` 仅用于离线预览。
+- 已用无效地址验证：默认模式会抛出明确错误并要求先启动 PowerContext。
+
+### 12.4 文案与演示站
+
+- 展示页、`SUBMISSION_CHECKLIST.md` 中的检索能力统一写成「SQLite FTS5 兼容检索层」，不再暗示已连接 seekdb。
+- 旧版 WorkBuddy 演示站标注为「静态快照，`/api/*` 返回 403」，不作为运行验收依据。
+
+### 12.5 提交信息
+
+- Qoder UID：`01a19235-1324-7a33-89c7-ecb6d3abe5bf`
+- 作品链接：https://smartknowledgehub-2yrvvh4q95p.qoder.zone
+
+---
+
 ## 附录
 
 ### A. 相关资源
@@ -597,7 +631,7 @@ Qoder: 可能的原因：
 
 - **开发者**: [您的名字]
 - **邮箱**: [您的邮箱]
-- **Qoder UID**: [您的 UID]
+- **Qoder UID**: `01a19235-1324-7a33-89c7-ecb6d3abe5bf`
 
 ### C. 开发时间线
 

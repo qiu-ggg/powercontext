@@ -14,9 +14,11 @@ pip install -r requirements.txt
 
 依赖：Flask 3.0.0、flask-cors 4.0.0、python-dotenv 1.0.0。
 
-## 3. （可选）启动真实 PowerContext Server
+## 3. （必选）启动真实 PowerContext Server
 
-不启动也能体验完整页面，此时 `POWERCONTEXT_MODE=auto` 会回退到本地兼容实现，并在页面徽标上标明。
+验收必须使用真实 PowerContext 服务（`POWERCONTEXT_MODE=remote`，默认值）。
+不做这一步应用会拒绝启动，并提示先启动 PowerContext Server。
+仅当只想离线预览界面时，才使用第 5 节的 `POWERCONTEXT_MODE=local`。
 
 ### 3.1 安装
 
@@ -72,14 +74,14 @@ python init_db.py
 ## 5. 启动应用
 
 ```bash
-# 推荐：优先使用真实服务，服务不可达时回退本地
+# 推荐默认：使用真实服务（POWERCONTEXT_MODE 默认就是 remote）
 python app.py
 
-# 强制真实服务（不可达会直接报错）
-set POWERCONTEXT_MODE=remote && python app.py          # Windows CMD
-$env:POWERCONTEXT_MODE="remote"; python app.py         # PowerShell
+# 可选：服务不可达时自动回退本地
+set POWERCONTEXT_MODE=auto && python app.py           # Windows CMD
+$env:POWERCONTEXT_MODE="auto"; python app.py          # PowerShell
 
-# 强制本地兼容实现
+# 仅离线预览页面时使用；验收不要用这个模式
 set POWERCONTEXT_MODE=local && python app.py
 ```
 
@@ -89,7 +91,7 @@ set POWERCONTEXT_MODE=local && python app.py
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `POWERCONTEXT_MODE` | `auto` | `auto` / `remote` / `local` |
+| `POWERCONTEXT_MODE` | `remote` | `remote`（必选）/ `auto` / `local` |
 | `POWERCONTEXT_BASE_URL` | `http://127.0.0.1:8000` | 真实服务地址 |
 | `FLASK_DEBUG` | `True` | 关闭调试时设为 `false` |
 

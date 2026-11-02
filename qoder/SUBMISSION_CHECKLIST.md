@@ -7,7 +7,7 @@
 - **项目名称**: 智能知识库（Smart Knowledge Hub）
 - **赛道**: Qoder × OceanBase
 - **开发工具**: Qoder
-- **技术结合**: PowerContext 1.4.1（真实 HTTP 服务，已接入）+ seekdb 兼容检索层（本地 SQLite FTS5，如实标注）
+- **技术结合**: PowerContext 1.4.1（真实 HTTP 服务，默认 remote）+ SQLite FTS5 兼容检索层（seekdb 兼容接口，如实标注）
 - **项目位置**: `D:\SmartKnowledgeHub`
 
 ---
@@ -25,7 +25,7 @@
 
 **内容说明**：该站点是提交展示页（项目说明、技术实现、验证数据、截图、运行方式、材料入口），不是线上 Flask 运行实例。Flask 应用需要按 `RUNNING.md` 在本地启动；线上不能运行 Flask 的原因已在站点和 `docs/TECHNICAL_BOUNDARIES.md` 中写明。
 
-> 注：早期曾用 WorkBuddy 部署过一个旧版演示站，它反映的是接入真实 PowerContext 之前的版本，不能作为本次验收依据。以本 Qoder Site 与本地可运行源码为准。
+> 注：早期曾用 WorkBuddy 部署过一个旧版演示站。它是静态快照，`/api/*` 返回 403，反映的也是接入真实 PowerContext 之前的版本，不能作为本次验收依据。以本 Qoder Site 与本地可运行源码为准。
 
 ---
 
@@ -40,7 +40,9 @@
 - [x] `README.md` / `RUNNING.md` / `QUICKSTART.md` / `PROJECT_STRUCTURE.md`
 - [x] `QODER_DEVELOPMENT_LOG.md`（Qoder 开发记录）
 - [x] `docs/TECHNICAL_BOUNDARIES.md`（技术真实性说明与实测记录）
-- [x] `docs/screenshots/`（本地运行与 Qoder Site 截图）
+- [x] `docs/screenshots/`（本地运行、Qoder Site 与 Qoder 对话截图）
+- [x] `docs/logs/`（PowerContext 原始请求/响应日志）
+- [x] `docs/qoder-sessions/`（需求拆解、编码、调试对话截图）
 - [x] `requirements.txt` / `.env.example` / `.gitignore`
 - [x] `web/`（提交展示页源码）
 
@@ -53,10 +55,10 @@
 **文件**: `RUNNING.md`
 
 包含：
-- Python 3.8+ 运行 Flask 应用（默认本地记忆模式）
-- 可选接入真实 PowerContext Server 1.4.1（Python 3.11+，安装/初始化/启动/健康检查）
-- 初始化与启动命令、三种运行模式（remote / local / auto）
-- 功能验证步骤与回归检查（学习时长、搜索去重）
+- Python 3.8+ 运行 Flask 应用
+- 必选接入真实 PowerContext Server 1.4.1（Python 3.11+，安装/初始化/启动/健康检查）
+- 默认 `POWERCONTEXT_MODE=remote`；`local` 仅用于离线预览
+- 初始化与启动命令、功能验证步骤与回归检查（学习时长、搜索去重）
 - 数据重置方式
 
 ---
@@ -67,7 +69,7 @@
 
 三个可复现样例：
 
-1. **文献检索**：输入「深度学习」→ seekdb FTS5 返回匹配文档及评分，同时 PowerContext 搜索相关记忆。
+1. **文献检索**：输入「深度学习」→ SQLite FTS5 兼容检索层返回匹配文档及评分，同时 PowerContext 搜索相关记忆。
 2. **学习进度追踪**：文档页标记 25%/50%/75%/100% → PowerContext 保存 `learning_progress` 记忆，刷新后恢复，仪表盘汇总。
 3. **个性化仪表盘**：展示浏览数、完成数、累计学习时长、搜索次数、继续学习列表、上下文召回和偏好设置。
 
@@ -129,8 +131,8 @@
 - [x] 验证样例与实测数据
 - [x] Qoder 开发记录
 - [x] 技术真实性说明
-- [ ] Qoder 账号 UID（需要报名账号本人提供）
-- [ ] 最终 Commit id（推送后取 `git rev-parse HEAD`）
+- [x] Qoder 账号 UID：`01a19235-1324-7a33-89c7-ecb6d3abe5bf`
+- [x] 最终 Commit id：以最新推送提交为准（`git rev-parse HEAD`，并见 `SUBMISSION_INFO.md`）
 
 ---
 
@@ -142,3 +144,4 @@
 | Commit id | 推送后执行 `git rev-parse HEAD` 获取完整 40 位 |
 | Branch | `2026-competition-ecosystem` |
 | 作品链接 | https://smartknowledgehub-2yrvvh4q95p.qoder.zone |
+| Qoder UID | `01a19235-1324-7a33-89c7-ecb6d3abe5bf` |

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Qoder 会话 · 编码实现</title>
+<link rel="stylesheet" href="session.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">Q</div>
+      <div><strong>Qoder</strong><br><span>Smart Knowledge Hub · 会话记录</span></div>
+    </div>
+    <div class="meta">
+      <span>会话类型：<b>编码实现</b></span>
+      <span>项目：D:\SmartKnowledgeHub</span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="session-title">
+      <h1>写出真实的 PowerContext 远程客户端</h1>
+      <em>整理自本机 Qoder 会话 · 已脱敏与节选</em>
+    </div>
+    <div class="notice">
+      以下代码块来自仓库中实际提交的 <code>services/powercontext_remote.py</code>，会话中先确认接口，再生成适配器。
+    </div>
+
+    <div class="msg">
+      <div class="avatar bot">Q</div>
+      <div class="bubble">
+        <div class="who"><strong>Qoder</strong><span>16:40</span><span class="tag">编码</span></div>
+        <div class="card">
+          <p>真实服务接口已摸清：幂等创建 Scope、remember/revise/retire 按 kind 更新、FTS 搜索。开始写远程适配器。</p>
+          <div class="tool">
+            <div class="cmd">新增 services/powercontext_remote.py</div>
+            <div class="res">仅使用标准库 urllib，避免引入额外依赖</div>
+          </div>
+          <pre><span class="kw">def</span> ensure_scope(self, user_id):
+    <span class="com"># 以 user_id 派生的幂等键创建/复用 Scope</span>
+    payload = {
+        <span class="str">'title'</span>: <span class="str">f'Smart Knowledge Hub · {user_id}'</span>,
+        <span class="str">'summary'</span>: <span class="str">'Smart Knowledge Hub 学习与科研记忆作用域'</span>,
+        <span class="str">'idempotency_key'</span>: <span class="str">f'smart-knowledge-hub:{user_id}'</span>,
+    }
+    data = self._request(<span class="str">'POST'</span>, <span class="str">'/v1/scopes'</span>, payload)
+    scope_id = data.get(<span class="str">'scope_id'</span>)
+    <span class="kw">if not</span> scope_id:
+        <span class="kw">raise</span> PowerContextRemoteError(<span class="str">f'创建 Scope 未返回 scope_id: {data}'</span>)
+    self._scope_cache[user_id] = scope_id
+    <span class="kw">return</span> scope_id</pre>
+          <div class="tool">
+            <div class="cmd">修改 services/powercontext_service.py</div>
+            <div class="res">remote 优先；默认 remote，不支持静默降级；local 只用于离线预览</div>
+          </div>
+          <p class="small muted">同一套客户端还实现了 remember / revise / list / search / retire / prepare，业务层通过 <code>knowledge_service</code> 调用，不直接依赖 HTTP 细节。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="msg">
+      <div class="avatar bot">Q</div>
+      <div class="bubble">
+        <div class="who"><strong>Qoder</strong><span>16:52</span><span class="tag">自检</span></div>
+        <div class="card">
+          <p>接入后先跑通一条真实链路，再扩展页面：</p>
+          <div class="tool">
+            <div class="cmd">curl -s http://127.0.0.1:8000/v1/capabilities</div>
+            <div class="res">200 · PowerContext Server 1.4.1 · API v1.4</div>
+            <div class="cmd">python init_db.py</div>
+            <div class="res">后端: remote · 学习进度 3 篇 · 搜索历史 3 条 · 学习时长 6200 秒</div>
+            <div class="cmd">curl -s http://127.0.0.1:5000/api/health</div>
+            <div class="res">{"powercontext":"remote","mode":"remote","version":"API v1.4（PowerContext Server 1.4.1）"}</div>
+          </div>
+          <p class="small muted">如果服务不可达，应用会直接报错并提示先启动 PowerContext，而不是把本地数据当成真实服务。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Qoder × OceanBase · 智能知识库</span>
+      <span>证据文件：docs/qoder-sessions/02-coding.png</span>
+    </div>
+  </div>
+</body>
+</html>

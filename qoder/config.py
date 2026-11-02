@@ -2,8 +2,8 @@
 应用配置类
 
 - 检索层：本地 SQLite + FTS5（seekdb 兼容接口，不连接 seekdb 服务）
-- 上下文层：默认优先连接真实 PowerContext Server（POWERCONTEXT_MODE=auto），
-  服务不可用时回退到本地 SQLite 兼容实现
+- 上下文层：默认连接真实 PowerContext Server（POWERCONTEXT_MODE=remote），
+  服务不可达时直接报错；仅离线预览页面时改用 local
 """
 
 import os

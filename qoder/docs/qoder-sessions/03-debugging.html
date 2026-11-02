@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Qoder 会话 · 调试排错</title>
+<link rel="stylesheet" href="session.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">Q</div>
+      <div><strong>Qoder</strong><br><span>Smart Knowledge Hub · 会话记录</span></div>
+    </div>
+    <div class="meta">
+      <span>会话类型：<b>调试排错</b></span>
+      <span>项目：D:\SmartKnowledgeHub</span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="session-title">
+      <h1>先定位真实原因，再改代码</h1>
+      <em>整理自本机 Qoder 会话 · 已脱敏与节选</em>
+    </div>
+    <div class="notice">
+      下面两个问题都来自实际运行：端口占用导致服务启动失败；统计字段错位与 405 导致学习时长恒为 0。修复后附有本机验证数据。
+    </div>
+
+    <div class="msg">
+      <div class="avatar bot">Q</div>
+      <div class="bubble">
+        <div class="who"><strong>Qoder</strong><span>16:31</span><span class="tag">排错 1</span></div>
+        <div class="card">
+          <div class="tool">
+            <div class="cmd">启动 PowerContext Server</div>
+            <div class="err">OSError: [WinError 10048] 通常每个套接字地址只允许使用一次</div>
+          </div>
+          <p>端口 8000 已被占用，但 <code>/openapi.json</code> 有响应，说明已经有一个 PowerContext 服务在跑。我确认一下它的身份和能力。</p>
+          <div class="tool">
+            <div class="cmd">curl http://127.0.0.1:8000/v1/capabilities</div>
+            <div class="res">PowerContext Server 1.4.1 · API v1.4 · 记忆接口可用</div>
+          </div>
+          <p><strong style="color:#7ee0b8">处理：</strong>不再重复启动，直接复用 8000 端口上已有的真实实例；随后用 remember / search 验证，返回 <code>mode: "fts"</code>。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="msg">
+      <div class="avatar bot">Q</div>
+      <div class="bubble">
+        <div class="who"><strong>Qoder</strong><span>17:20</span><span class="tag">排错 2</span></div>
+        <div class="card">
+          <div class="tool">
+            <div class="cmd">查看仪表盘学习统计</div>
+            <div class="err">total_study_time 始终为 0，搜索历史出现重复记录</div>
+          </div>
+          <p><strong style="color:#f2c46d">根因：</strong></p>
+          <ul>
+            <li>离开文档时 <code>sendBeacon</code> 向只允许 GET 的接口发 POST，返回 405，阅读时长没有写入；</li>
+            <li>分析接口读取了统计接口没有返回的字段，即使有数据也汇总不到；</li>
+            <li>文档页的「相关文档」用标签串走搜索接口，被当成用户搜索写入历史。</li>
+          </ul>
+          <p><strong style="color:#7ee0b8">修复：</strong></p>
+          <ul>
+            <li>文档路由同时接受 GET / POST，页面在 <code>pagehide</code> 时只上报一次；</li>
+            <li>统计接口补齐 <code>total_study_time</code>、浏览数、搜索数，分析层直接汇总；</li>
+            <li>相关推荐请求加 <code>record=0</code>；相同查询 30 秒内只保留一条。</li>
+          </ul>
+          <div class="checks">
+            <div class="check">学习时长<br><b>6200 秒 → 6380 秒</b><br><span class="muted">上报 180 秒后</span></div>
+            <div class="check">重复搜索<br><b>只 +1 次</b><br><span class="muted">同词 30 秒内</span></div>
+            <div class="check">相关文档<br><b>不写历史</b><br><span class="muted">record=0</span></div>
+            <div class="check">实际后端<br><b>remote</b><br><span class="muted">页面与 API 一致</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Qoder × OceanBase · 智能知识库</span>
+      <span>证据文件：docs/qoder-sessions/03-debugging.png</span>
+    </div>
+  </div>
+</body>
+</html>
