@@ -1015,3 +1015,29 @@ body {
         width: 100%;
     }
 }
+
+/* 后端状态徽标：区分真实 PowerContext 服务与本地兼容实现 */
+.backend-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    vertical-align: middle;
+    border: 1px solid #d0d7de;
+    background: #f6f8fa;
+    color: #57606a;
+}
+
+.backend-badge.remote {
+    border-color: #2da44e;
+    background: #dafbe1;
+    color: #116329;
+}
+
+.backend-badge.local {
+    border-color: #bf8700;
+    background: #fff8c5;
+    color: #7d4e00;
+}

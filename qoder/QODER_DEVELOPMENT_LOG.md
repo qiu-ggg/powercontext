@@ -532,15 +532,66 @@ Qoder: 可能的原因：
 
 ---
 
+## 十一、再验整改记录（2026-11-02 晚）
+
+针对「赛道 B 验收对照表（再验版）」提出的问题，按优先级整改。
+
+### 11.1 技术真实性
+
+**问题**：原实现把本地 SQLite 写成 seekdb，PowerContext 也只是本地模拟，容易被判为“未真正结合”。
+
+**处理**：
+1. 接入真实 PowerContext Server 1.4.1：新增 `services/powercontext_remote.py`，通过 HTTP 调用 `/v1/scopes`、`/v1/memory/remember`、`/v1/memory/search`、`/v1/memory/entries/*`、`/v1/context/prepare`。
+2. 记忆服务改为 remote 优先、local 兜底（`POWERCONTEXT_MODE=auto|remote|local`），健康检查和仪表盘显示真实后端。
+3. seekdb 不再伪装：明确为“本地 SQLite + FTS5 兼容检索层”，`/api/health` 直接标注，`vector_score` 固定 0.0，边界写入 `docs/TECHNICAL_BOUNDARIES.md`。
+
+**排错记录**：
+- 后台启动服务时报 `WinError 10048`，排查发现已有 uv 安装的 PowerContext 实例占用 8000 端口，改为复用该实例。
+- Git Bash 里的 `python` 指向 WindowsApps 存根（退出码 49），改用 Python 3.10 绝对路径执行项目脚本。
+- `/v1/memory/entries/list` 传 `query`/`limit` 返回 `extra_forbidden`，改为只传 `scope_id` 与 `include_inactive`。
+
+### 11.2 Qoder Sites 发布
+
+- 使用 `prepare_site` → `publish_site` 重新发布展示页，`published: true`。
+- 地址：https://smartknowledgehub-2yrvvh4q95p.qoder.zone
+- 截图：`docs/screenshots/qoder-site.png`
+
+### 11.3 统计与去重修复
+
+**问题 1**：仪表盘学习时长恒为 0。
+
+原因：分析接口读取的字段与统计接口返回的字段不一致。修复：`get_user_statistics` 增加 `total_study_time`、`viewed_documents`、`search_history`，分析层直接使用。
+
+**问题 2**：文档阅读时长从未上报。
+
+原因：`sendBeacon` 向只支持 GET 的路由发 POST，返回 405。修复：文档路由改为 GET+POST，页面 `pagehide`/`beforeunload` 时上报，并用标志位避免重复。
+
+**问题 3**：搜索历史被标签关联查询污染。
+
+原因：相关文档检索也走同一个记录入口。修复：新增 `record=0` 参数，并在服务层做 30 秒同词去重。
+
+**实测**：
+- 学习时长 6200 秒，上报 180 秒后为 6380 秒。
+- 同一关键词重复搜索只 +1。
+- `record=0` 的关联搜索不写入历史。
+
+### 11.4 交付材料
+
+- 重写 `README.md`、`RUNNING.md`，补充 `docs/TECHNICAL_BOUNDARIES.md`。
+- 更新 `SUBMISSION_CHECKLIST.md`、`FORM_FILING_GUIDE.md`。
+- 重新生成提交压缩包 `SmartKnowledgeHub-submission-2026.zip`。
+
+---
+
 ## 附录
 
 ### A. 相关资源
 
-- **项目仓库**: [GitHub URL]
-- **项目网站**: [Qoder Sites URL]
-- **seekdb 文档**: [链接]
-- **PowerContext 文档**: [链接]
-- **Flask 文档**: [链接]
+- **项目仓库**: https://github.com/qiu-ggg/powercontext （分支 `2026-competition-ecosystem`，资产位于 `qoder/`）
+- **项目网站**: https://smartknowledgehub-2yrvvh4q95p.qoder.zone
+- **seekdb 文档**: https://github.com/oceanbase/seekdb
+- **PowerContext 文档**: https://github.com/oceanbase/powercontext/tree/2026-competition-ecosystem
+- **Flask 文档**: https://flask.palletsprojects.com
 
 ### B. 联系方式
 

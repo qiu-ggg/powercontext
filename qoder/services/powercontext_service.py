@@ -1,7 +1,15 @@
 """
-PowerContext 服务模块 - 本地实现
-兼容 PowerContext API v1.4 规范：Scope 隔离、Atomic Memory、Search、Recall
-使用 SQLite 作为本地存储后端
+PowerContext 服务模块
+
+支持两种后端，由环境变量切换：
+
+- remote：连接真实的 PowerContext Server（API v1.4，实测 1.4.1），
+  记忆读写、FTS 搜索与 Scope 隔离全部由服务端完成，见 powercontext_remote.py
+- local：本地 SQLite 兼容实现（Scope 隔离、Memory、Search、Recall 的语义对齐），
+  用于没有 PowerContext 服务的离线演示
+
+POWERCONTEXT_MODE=auto（默认）时优先使用真实服务，探测失败才退回本地；
+POWERCONTEXT_MODE=remote 时强制真实服务，不可达会直接报错，避免静默降级。
 """
 
 import sqlite3
@@ -10,16 +18,53 @@ import json
 import time
 from datetime import datetime
 
+from services.powercontext_remote import RemotePowerContextClient, PowerContextRemoteError
+
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'powercontext.db')
+
+# PowerContext 单条记忆上限 8192 UTF-8 字节，远程模式下需控制聚合记忆的体积
+REMOTE_TEXT_LIMIT = 8000
 
 
 class PowerContextService:
-    """PowerContext 上下文服务（本地实现，兼容 PowerContext API 模式）"""
+    """PowerContext 上下文服务（真实服务优先，本地兼容实现兜底）"""
 
-    def __init__(self, db_path=None):
+    def __init__(self, db_path=None, mode=None, base_url=None):
         self.db_path = db_path or DB_PATH
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self._init_db()
+
+        requested = (mode or os.getenv('POWERCONTEXT_MODE', 'auto')).strip().lower()
+        self.base_url = base_url or os.getenv('POWERCONTEXT_BASE_URL', 'http://127.0.0.1:8000')
+        self._remote_client = None
+        self.mode = 'local'
+        self.remote_error = None
+
+        if requested in ('remote', 'auto'):
+            client = RemotePowerContextClient(self.base_url)
+            if client.available():
+                self._remote_client = client
+                self.mode = 'remote'
+            elif requested == 'remote':
+                raise RuntimeError(
+                    f'POWERCONTEXT_MODE=remote，但 {self.base_url} 上没有可用的 PowerContext 服务。'
+                    '请先启动 PowerContext Server（见 RUNNING.md），或改用 POWERCONTEXT_MODE=local。'
+                )
+            else:
+                self.remote_error = f'{self.base_url} 不可达，已回退本地实现'
+
+    @property
+    def is_remote(self):
+        return self._remote_client is not None
+
+    def describe(self):
+        """返回当前后端信息，供健康检查/页面展示"""
+        return {
+            'mode': self.mode,
+            'base_url': self.base_url if self.is_remote else None,
+            'version': 'API v1.4（PowerContext Server 1.4.1）' if self.is_remote else '本地兼容实现（SQLite）',
+            'fallback_reason': self.remote_error,
+        }
 
     def _get_conn(self):
         conn = sqlite3.connect(self.db_path)
@@ -91,6 +136,18 @@ class PowerContextService:
             value: 记忆内容
             metadata: 元数据
         """
+        if self.is_remote:
+            try:
+                self._remote_client.save(
+                    user_id, key,
+                    RemotePowerContextClient.encode_value(value),
+                    reason=f'save {key}'
+                )
+                return True
+            except PowerContextRemoteError as e:
+                print(f"PowerContext 远程写入失败: {e}")
+                return False
+
         self._ensure_scope(user_id)
         conn = self._get_conn()
         try:
@@ -151,6 +208,14 @@ class PowerContextService:
         Returns:
             记忆值，如果不存在则返回 None
         """
+        if self.is_remote:
+            try:
+                value, _ = self._remote_client.load(user_id, key)
+                return value
+            except PowerContextRemoteError as e:
+                print(f"PowerContext 远程读取失败: {e}")
+                return None
+
         conn = self._get_conn()
         try:
             row = conn.execute(
@@ -171,6 +236,13 @@ class PowerContextService:
         """
         删除用户记忆 - 对应 PowerContext 的 lifecycle: forget
         """
+        if self.is_remote:
+            try:
+                return self._remote_client.retire(user_id, key, reason=f'forget {key}')
+            except PowerContextRemoteError as e:
+                print(f"PowerContext 远程删除失败: {e}")
+                return False
+
         conn = self._get_conn()
         try:
             conn.execute(
@@ -191,6 +263,13 @@ class PowerContextService:
         """
         获取用户的所有活跃记忆 - 对应 PowerContext 的 List Atomic Memory
         """
+        if self.is_remote:
+            try:
+                return self._remote_client.load_all(user_id)
+            except PowerContextRemoteError as e:
+                print(f"PowerContext 远程列表失败: {e}")
+                return {}
+
         conn = self._get_conn()
         try:
             rows = conn.execute(
@@ -213,9 +292,16 @@ class PowerContextService:
 
     def search_memory(self, user_id, query, limit=10):
         """
-        搜索记忆 - 对应 PowerContext 的 Search Artifacts API
-        POST /v1/scopes/{scope_id}/artifacts/{family}/search
+        搜索记忆 - 远程模式调用 PowerContext 的 POST /v1/memory/search
+        （服务端 FTS 检索；本地模式用 LIKE 兼容实现）
         """
+        if self.is_remote:
+            try:
+                return self._remote_client.search(user_id, query, limit)
+            except PowerContextRemoteError as e:
+                print(f"PowerContext 远程搜索失败: {e}")
+                return []
+
         conn = self._get_conn()
         try:
             rows = conn.execute(
@@ -248,9 +334,16 @@ class PowerContextService:
 
     def recall_context(self, user_id, kind=None, tags=None, limit=50):
         """
-        召回上下文 - 对应 PowerContext 的 Recall Manifest API
-        POST /v1/recall/manifest
+        召回上下文 - 远程模式读取 PowerContext 的活动 Memory 条目；
+        本地模式返回同结构清单
         """
+        if self.is_remote:
+            try:
+                return self._remote_client.recall(user_id, kind=kind, limit=limit)
+            except PowerContextRemoteError as e:
+                print(f"PowerContext 远程召回失败: {e}")
+                return {'scope_id': user_id, 'entries': [], 'total': 0, 'mode': 'remote-error'}
+
         conn = self._get_conn()
         try:
             sql = """SELECT artifact_id, kind, description, text
@@ -314,15 +407,45 @@ class PowerContextService:
         return self.get_memory(user_id, 'preferences')
 
     def add_search_history(self, user_id, query, results_count=0):
-        """添加搜索历史"""
+        """添加搜索历史（相同查询在 30 秒内只保留一条，避免刷新/回显造成重复）"""
         history = self.get_memory(user_id, 'search_history') or []
+        if not isinstance(history, list):
+            history = []
+
+        now = datetime.now()
+        last = history[-1] if history else None
+        if isinstance(last, dict) and last.get('query') == query:
+            try:
+                last_time = datetime.fromisoformat(last.get('timestamp', ''))
+            except (ValueError, TypeError):
+                last_time = None
+            if last_time and (now - last_time).total_seconds() <= 30:
+                last['results_count'] = results_count
+                last['timestamp'] = now.isoformat()
+                return self.save_memory(user_id, 'search_history', history)
+
         history.append({
             'query': query,
             'results_count': results_count,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': now.isoformat()
         })
-        history = history[-50:]
+
+        if self.is_remote:
+            history = self._fit_remote_text(history, keep=20)
+        else:
+            history = history[-50:]
         return self.save_memory(user_id, 'search_history', history)
+
+    @staticmethod
+    def _fit_remote_text(items, keep):
+        """裁剪聚合记忆，确保不超过 PowerContext 单条 8192 字节限制"""
+        items = items[-keep:]
+        while items:
+            text = json.dumps(items, ensure_ascii=False)
+            if len(text.encode('utf-8')) <= REMOTE_TEXT_LIMIT:
+                break
+            items = items[1:]
+        return items
 
     def get_search_history(self, user_id, limit=20):
         """获取搜索历史"""
@@ -344,7 +467,10 @@ class PowerContextService:
             'view_duration': view_duration,
             'last_viewed': datetime.now().isoformat()
         })
-        viewed = viewed[-100:]
+        if self.is_remote:
+            viewed = self._fit_remote_text(viewed, keep=50)
+        else:
+            viewed = viewed[-100:]
         return self.save_memory(user_id, 'viewed_documents', viewed)
 
     def get_recommendations(self, user_id, category=None, limit=5):
@@ -374,11 +500,20 @@ class PowerContextService:
         if not isinstance(search_hist, list):
             search_hist = []
 
+        total_study_time = sum(
+            doc.get('view_duration', 0)
+            for doc in viewed_docs if isinstance(doc, dict)
+        )
+
         stats = {
             'total_documents_viewed': len(viewed_docs),
             'total_searches': len(search_hist),
+            'total_study_time': total_study_time,
+            'viewed_documents': viewed_docs,
+            'search_history': search_hist,
             'categories_learned': [],
-            'recent_activity': []
+            'recent_activity': [],
+            'backend': self.mode
         }
 
         for doc in viewed_docs:

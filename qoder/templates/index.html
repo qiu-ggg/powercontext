@@ -23,7 +23,8 @@
     <section class="hero">
         <div class="container">
             <h1>智能知识库管理系统</h1>
-            <p class="subtitle">基于 seekdb + PowerContext 的智能学习与科研助手</p>
+            <p class="subtitle">本地 FTS5 检索层（seekdb 兼容）+ PowerContext 上下文服务</p>
+            <div id="backendBadge" class="backend-badge">正在检测后端...</div>
 
             <div class="search-box">
                 <input type="text" id="searchInput" placeholder="搜索论文、笔记、资料..." />
@@ -68,7 +69,7 @@
                 <div class="feature-card">
                     <div class="feature-icon">&#x1f50d;</div>
                     <h3>智能检索</h3>
-                    <p>基于 seekdb 的 FTS5 全文检索，快速找到相关内容</p>
+                    <p>本地 SQLite FTS5 全文检索（seekdb 兼容检索层），快速找到相关内容</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">&#x1f9e0;</div>
@@ -94,11 +95,11 @@
                 </div>
                 <div class="tech-item highlight">
                     <h4>数据检索</h4>
-                    <p>seekdb (SQLite + FTS5)</p>
+                    <p>SQLite + FTS5（seekdb 兼容层）</p>
                 </div>
                 <div class="tech-item highlight">
                     <h4>上下文服务</h4>
-                    <p>PowerContext (本地)</p>
+                    <p>PowerContext Server 1.4.1</p>
                 </div>
                 <div class="tech-item">
                     <h4>前端</h4>
@@ -107,12 +108,12 @@
             </div>
             <div class="tech-desc">
                 <div class="tech-desc-item">
-                    <h4>seekdb 的作用</h4>
-                    <p>提供混合检索能力：FTS5 全文索引实现关键词匹配，结构化查询支持分类和时间过滤。所有文档存储和搜索均通过 seekdb 完成。</p>
+                    <h4>检索层（seekdb 兼容）</h4>
+                    <p>文档存储与关键词检索由本地 SQLite + FTS5 完成，接口与结果结构按 seekdb 的检索模式设计，包含分类过滤与预留的向量分数字段。当前部署未连接 seekdb 服务，向量检索为预留能力。</p>
                 </div>
                 <div class="tech-desc-item">
                     <h4>PowerContext 的作用</h4>
-                    <p>管理用户上下文记忆：Scope 隔离的用户空间、Atomic Memory 原子记忆（学习进度、搜索历史、偏好设置），支持记忆搜索和上下文召回。</p>
+                    <p>用户上下文记忆由 PowerContext 管理：按用户隔离 Scope，学习进度、搜索历史、浏览记录与偏好以 Atomic Memory 写入。启动 PowerContext Server 时通过 HTTP 调用真实服务（1.4.1），服务不可达时回退到本地兼容实现，页面顶部会显示当前实际后端。</p>
                 </div>
             </div>
         </div>
@@ -124,7 +125,7 @@
             <div class="demo-grid">
                 <div class="demo-card" onclick="window.location='/search?q=深度学习'">
                     <h4>&#x1f50d; 搜索「深度学习」</h4>
-                    <p>体验 seekdb 全文检索能力</p>
+                    <p>体验本地 FTS5 全文检索</p>
                 </div>
                 <div class="demo-card" onclick="window.location='/document/1'">
                     <h4>&#x1f4d6; 查看第一篇文档</h4>
@@ -144,7 +145,7 @@
             <p class="tech-used">
                 技术栈:
                 <a href="https://github.com/oceanbase/powercontext" target="_blank">PowerContext</a> |
-                seekdb (SQLite + FTS5)
+                本地 SQLite FTS5（seekdb 兼容检索层）
             </p>
         </div>
     </footer>
@@ -161,11 +162,30 @@
                 const analytics = await analyticsResponse.json();
                 document.getElementById('totalSearches').textContent = analytics.total_searches || 0;
 
-                const studyTimeHours = Math.floor((analytics.total_study_time || 0) / 3600);
-                const studyTimeMin = Math.floor(((analytics.total_study_time || 0) % 3600) / 60);
-                document.getElementById('studyTime').textContent = studyTimeHours > 0 ? studyTimeHours + 'h' : studyTimeMin + 'm';
+                const totalSec = analytics.total_study_time || 0;
+                const studyTimeHours = Math.floor(totalSec / 3600);
+                const studyTimeMin = Math.floor((totalSec % 3600) / 60);
+                document.getElementById('studyTime').textContent =
+                    studyTimeHours > 0 ? studyTimeHours + 'h' + studyTimeMin + 'm' : studyTimeMin + 'm';
             } catch (error) {
                 console.error('加载统计数据失败:', error);
+            }
+        }
+
+        async function loadBackend() {
+            const badge = document.getElementById('backendBadge');
+            try {
+                const res = await fetch('/api/health');
+                const data = await res.json();
+                if (data.powercontext === 'remote') {
+                    badge.textContent = 'PowerContext Server 1.4.1 · 已连接';
+                    badge.className = 'backend-badge remote';
+                } else {
+                    badge.textContent = 'PowerContext 本地兼容实现 · 真实服务未连接';
+                    badge.className = 'backend-badge local';
+                }
+            } catch (error) {
+                badge.textContent = '后端状态未知';
             }
         }
 
@@ -180,7 +200,10 @@
             if (e.key === 'Enter') performSearch();
         });
 
-        window.addEventListener('load', loadStats);
+        window.addEventListener('load', function() {
+            loadStats();
+            loadBackend();
+        });
     </script>
 </body>
 </html>

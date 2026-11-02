@@ -42,7 +42,7 @@
 
             <div class="search-options">
                 <span class="search-tip">
-                    &#x1f4a1; seekdb FTS5 全文检索引擎，支持中文分词匹配
+                    &#x1f4a1; 本地 SQLite FTS5 检索（seekdb 兼容检索层），支持中文分词匹配
                 </span>
             </div>
         </div>
@@ -54,7 +54,7 @@
             <div id="searchResults" class="results-list"></div>
 
             <div id="memorySearch" class="memory-search" style="display:none; margin-top: 30px;">
-                <h3>&#x1f9e0; PowerContext 记忆搜索</h3>
+                <h3>&#x1f9e0; PowerContext 记忆搜索 <span id="pcMode" class="backend-badge"></span></h3>
                 <div id="memoryResults" class="memory-results"></div>
             </div>
         </div>
@@ -101,7 +101,7 @@
                 }
 
                 document.getElementById('searchStatus').innerHTML =
-                    '<div class="result-count">找到 ' + data.count + ' 个结果 (seekdb FTS5 检索)</div>';
+                    '<div class="result-count">找到 ' + data.count + ' 个结果 (SQLite FTS5 检索)</div>';
 
                 displayResults(data.results);
                 searchMemory(query);
@@ -177,7 +177,25 @@
             if (e.key === 'Enter') performSearch();
         });
 
+        async function loadBackendBadge() {
+            const badge = document.getElementById('pcMode');
+            try {
+                const res = await fetch('/api/health');
+                const data = await res.json();
+                if (data.powercontext === 'remote') {
+                    badge.textContent = 'PowerContext Server 1.4.1';
+                    badge.className = 'backend-badge remote';
+                } else {
+                    badge.textContent = '本地兼容实现';
+                    badge.className = 'backend-badge local';
+                }
+            } catch (e) {
+                badge.textContent = '';
+            }
+        }
+
         window.addEventListener('load', function() {
+            loadBackendBadge();
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('q')) performSearch();
         });

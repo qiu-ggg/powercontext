@@ -113,17 +113,22 @@ def init_seekdb():
 
 
 def init_powercontext():
-    """初始化 PowerContext 数据库并创建示例记忆"""
-    print("\n步骤 2/3: 初始化 PowerContext (本地上下文服务)...")
+    """初始化 PowerContext 记忆（真实服务优先，本地实现兜底）"""
+    print("\n步骤 2/3: 初始化 PowerContext...")
 
     db_path = os.path.join(DATA_DIR, 'powercontext.db')
-    if os.path.exists(db_path):
-        os.remove(db_path)
-
     pc = PowerContextService(db_path)
+    ctx = pc.describe()
+    print(f"  后端: {ctx['mode']} ({ctx['version']})")
+    if ctx.get('fallback_reason'):
+        print(f"  说明: {ctx['fallback_reason']}")
+
+    if not pc.is_remote and os.path.exists(db_path):
+        pc = None
+        os.remove(db_path)
+        pc = PowerContextService(db_path)
 
     demo_user = 'demo_user'
-    pc._ensure_scope(demo_user)
 
     pc.save_user_preferences(demo_user, {
         'interests': '人工智能,数据库,Web开发',
@@ -149,7 +154,8 @@ def init_powercontext():
     print(f"  ✓ 浏览记录已保存 (4 篇文档)")
 
     stats = pc.get_user_statistics(demo_user)
-    print(f"  PowerContext 初始化完成: {stats['total_documents_viewed']} 篇已浏览, {stats['total_searches']} 次搜索")
+    print(f"  PowerContext 初始化完成: {stats['total_documents_viewed']} 篇已浏览, "
+          f"{stats['total_searches']} 次搜索, 学习时长 {stats['total_study_time']} 秒")
     return pc
 
 

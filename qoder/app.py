@@ -8,6 +8,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from config import Config
 from services.knowledge_service import knowledge_service
+from services.powercontext_service import powercontext_service
 
 
 def create_app():
@@ -43,13 +44,19 @@ def register_routes(app):
 
     @app.route('/api/health', methods=['GET'])
     def health_check():
+        ctx = powercontext_service.describe()
         return jsonify({
             'status': 'ok',
             'service': 'Smart Knowledge Hub',
-            'version': '1.0.0',
-            'seekdb': 'SQLite + FTS5',
-            'powercontext': 'local'
+            'version': '1.1.0',
+            'seekdb': '本地 SQLite + FTS5（seekdb 兼容检索层）',
+            'powercontext': ctx['mode'],
+            'powercontext_detail': ctx
         })
+
+    @app.route('/api/powercontext/status', methods=['GET'])
+    def powercontext_status():
+        return jsonify(powercontext_service.describe())
 
     @app.route('/api/search', methods=['GET'])
     def search():
@@ -57,6 +64,7 @@ def register_routes(app):
         user_id = request.args.get('user_id', 'default_user')
         category = request.args.get('category')
         limit = int(request.args.get('limit', 20))
+        record_history = request.args.get('record', '1') not in ('0', 'false', 'False')
 
         if not query:
             return jsonify({'error': '请提供搜索关键词'}), 400
@@ -66,7 +74,8 @@ def register_routes(app):
                 user_id=user_id,
                 query=query,
                 category=category,
-                limit=limit
+                limit=limit,
+                record_history=record_history
             )
             return jsonify({
                 'query': query,
@@ -76,8 +85,30 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/document/<int:doc_id>', methods=['GET'])
+    @app.route('/api/document/<int:doc_id>', methods=['GET', 'POST'])
     def get_document(doc_id):
+        # GET：读取文档并加载进度；POST：页面离开时用 sendBeacon 上报浏览时长
+        if request.method == 'POST':
+            payload = request.get_json(silent=True) or request.form
+            user_id = payload.get('user_id', 'default_user')
+            try:
+                view_duration = int(payload.get('view_duration', 0) or 0)
+            except (TypeError, ValueError):
+                view_duration = 0
+
+            if view_duration <= 0:
+                return jsonify({'success': True, 'recorded': False})
+
+            try:
+                knowledge_service.get_document(
+                    user_id=user_id,
+                    document_id=doc_id,
+                    view_duration=view_duration
+                )
+                return jsonify({'success': True, 'recorded': True, 'view_duration': view_duration})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
         user_id = request.args.get('user_id', 'default_user')
         view_duration = int(request.args.get('view_duration', 0))
 
@@ -231,8 +262,11 @@ if __name__ == '__main__':
     print("=" * 60)
     print("智能知识库 - Smart Knowledge Hub")
     print("=" * 60)
-    print(f"seekdb: SQLite + FTS5 (本地混合检索)")
-    print(f"PowerContext: 本地上下文服务")
+    print(f"seekdb: 本地 SQLite + FTS5（seekdb 兼容检索层）")
+    ctx = powercontext_service.describe()
+    print(f"PowerContext: {ctx['mode']} ({ctx['version']})")
+    if ctx.get('fallback_reason'):
+        print(f"  回退原因: {ctx['fallback_reason']}")
     print(f"访问地址: http://localhost:5000")
     print("=" * 60)
     app.run(host='0.0.0.0', port=5000, debug=app.config['DEBUG'])

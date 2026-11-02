@@ -14,8 +14,8 @@ class KnowledgeService:
         self.seekdb = seekdb_service
         self.powercontext = powercontext_service
 
-    def search_knowledge(self, user_id, query, category=None, limit=20):
-        """搜索知识库并记录用户行为"""
+    def search_knowledge(self, user_id, query, category=None, limit=20, record_history=True):
+        """搜索知识库；record_history=False 用于相关推荐等非用户主动搜索"""
         filters = {}
         if category:
             filters['category'] = category
@@ -26,11 +26,12 @@ class KnowledgeService:
             limit=limit
         )
 
-        self.powercontext.add_search_history(
-            user_id=user_id,
-            query=query,
-            results_count=len(results)
-        )
+        if record_history:
+            self.powercontext.add_search_history(
+                user_id=user_id,
+                query=query,
+                results_count=len(results)
+            )
 
         return results
 
@@ -125,22 +126,15 @@ class KnowledgeService:
         preferences = self.powercontext.get_user_preferences(user_id) or {}
 
         analytics = {
-            'total_study_time': 0,
+            'total_study_time': stats.get('total_study_time', 0),
             'documents_completed': 0,
             'documents_in_progress': 0,
-            'favorite_categories': [],
+            'favorite_categories': stats.get('categories_learned', []),
             'total_searches': stats.get('total_searches', 0),
             'total_documents_viewed': stats.get('total_documents_viewed', 0),
-            'preferences': preferences
+            'preferences': preferences,
+            'backend': stats.get('backend', 'local')
         }
-
-        viewed_docs = stats.get('viewed_documents', [])
-        if isinstance(viewed_docs, list):
-            total_time = sum(
-                doc.get('view_duration', 0)
-                for doc in viewed_docs if isinstance(doc, dict)
-            )
-            analytics['total_study_time'] = total_time
 
         all_memories = self.powercontext.get_all_memories(user_id)
         completed = 0

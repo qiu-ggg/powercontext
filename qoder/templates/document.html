@@ -133,7 +133,8 @@
             try {
                 const tags = '{{ document.tags }}';
                 const category = '{{ document.category }}';
-                const response = await fetch('/api/search?q=' + encodeURIComponent(tags) + '&category=' + encodeURIComponent(category) + '&user_id=' + userId + '&limit=5');
+                // record=0：相关文档是系统推荐，不计入用户的搜索历史
+                const response = await fetch('/api/search?q=' + encodeURIComponent(tags) + '&category=' + encodeURIComponent(category) + '&user_id=' + userId + '&limit=5&record=0');
                 const data = await response.json();
                 const related = (data.results || []).filter(function(r) { return r.document_id !== docId; }).slice(0, 4);
                 const container = document.getElementById('relatedList');
@@ -161,15 +162,21 @@
             return div.innerHTML;
         }
 
-        window.addEventListener('beforeunload', function() {
+        var durationReported = false;
+        function reportViewDuration() {
+            if (durationReported) return;
             var viewDuration = Math.floor((Date.now() - startTime) / 1000);
             if (viewDuration > 3) {
+                durationReported = true;
                 var data = new FormData();
                 data.append('user_id', userId);
                 data.append('view_duration', String(viewDuration));
                 navigator.sendBeacon('/api/document/' + docId, data);
             }
-        });
+        }
+
+        window.addEventListener('pagehide', reportViewDuration);
+        window.addEventListener('beforeunload', reportViewDuration);
 
         window.addEventListener('load', function() {
             loadProgress();

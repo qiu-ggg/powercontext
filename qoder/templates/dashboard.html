@@ -23,7 +23,9 @@
     <section class="dashboard-section">
         <div class="container">
             <h2>学习仪表盘</h2>
-            <p class="section-desc">PowerContext 记忆驱动的个性化学习追踪</p>
+            <p class="section-desc">PowerContext 记忆驱动的个性化学习追踪
+                <span id="pcBackend" class="backend-badge">正在检测...</span>
+            </p>
 
             <div class="stats-grid">
                 <div class="stat-card-large">
@@ -124,6 +126,15 @@
                 const dashboard = await dashboardRes.json();
                 const preferences = await preferencesRes.json();
                 const recall = await recallRes.json();
+
+                const badge = document.getElementById('pcBackend');
+                if (analytics.backend === 'remote') {
+                    badge.textContent = '后端：PowerContext Server 1.4.1';
+                    badge.className = 'backend-badge remote';
+                } else {
+                    badge.textContent = '后端：PowerContext 本地兼容实现';
+                    badge.className = 'backend-badge local';
+                }
 
                 document.getElementById('docsViewed').textContent = analytics.total_documents_viewed || 0;
                 document.getElementById('docsCompleted').textContent = analytics.documents_completed || 0;
