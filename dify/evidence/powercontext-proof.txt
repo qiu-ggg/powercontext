@@ -1,0 +1,9 @@
+--- scopes for 铁柱 ---
+scp_35ws7pfcxeyf0ae1e4jnws9a7t | 记仇酒馆::铁柱 | 玩家 铁柱 在记仇酒馆的恩怨账本
+
+--- memory entries (heads + versions) ---
+mem_ent_6d5df8f035674f848b735e37b380a6a3 | mem_ver_547b67c0294a466ebc18df3969ffc976 | 1 | grudge_event | 铁柱往老周的啤酒里加了辣椒水，老周狠狠瞪了他一眼并在账本上做了标记。（怒气 +3） | 1
+mem_ent_85b2c165564d440d827ae6fa0682c295 | mem_ver_d7be388965384a65977be50424f795af | 1 | grudge_event | 铁柱把假蟑螂塞进老周的杯垫底下，老周骂了一句并把假蟑螂藏好。（怒气 +3） | 2
+mem_ent_bc385267ff6b47508dc343bec899e220 | mem_ver_06f8d91b12584c12b97fef6d83e25482 | 1 | grudge_event | 铁柱偷换了老周的招牌酒，老周怒不可遏，大声呵斥，怒气+5 | 3
+
+memory artifact: ('memory', 1)

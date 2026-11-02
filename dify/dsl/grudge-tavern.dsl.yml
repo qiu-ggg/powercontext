@@ -1,0 +1,659 @@
+app:
+  description: NPC 老周会把你的每一次恶作剧记在心里，下一次见面连本带利还给你。Dify 编排 + PowerContext 长期记忆 + seekdb
+    知识库。
+  icon: 🍺
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: advanced-chat
+  name: 记仇酒馆
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openai_api_compatible:0.0.73@4cf123ffaa4556f079bed6c47f3a462cc825504b859b183239e74eb19136a4b5
+    version: null
+kind: app
+site:
+  chat_color_theme: null
+  chat_color_theme_inverted: false
+  copyright: null
+  custom_disclaimer: ''
+  default_language: en-US
+  description: null
+  icon: 🍺
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  input_placeholder: null
+  privacy_policy: null
+  show_workflow_steps: true
+  title: 记仇酒馆
+  use_icon_as_answer_icon: false
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: 欢迎来到记仇酒馆。报上名字，然后告诉老周你想干什么——小心，他什么都记得。
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions:
+    - 把他的啤酒换成辣椒水
+    - 往他杯垫下放一只假蟑螂
+    - 上次的事是我不对，这轮我请
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: code
+      id: start-source-prep-target
+      source: start
+      sourceHandle: source
+      target: prep
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: http-request
+      id: prep-source-scope-target
+      source: prep
+      sourceHandle: source
+      target: scope
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: http-request
+        targetType: code
+      id: scope-source-parse_scope-target
+      source: scope
+      sourceHandle: source
+      target: parse_scope
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: http-request
+      id: parse_scope-source-recall-target
+      source: parse_scope
+      sourceHandle: source
+      target: recall
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: http-request
+        targetType: code
+      id: recall-source-parse_recall-target
+      source: recall
+      sourceHandle: source
+      target: parse_recall
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: knowledge-retrieval
+      id: parse_recall-source-kb-target
+      source: parse_recall
+      sourceHandle: source
+      target: kb
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: knowledge-retrieval
+        targetType: llm
+      id: kb-source-llm-target
+      source: kb
+      sourceHandle: source
+      target: llm
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: code
+      id: llm-source-parse_llm-target
+      source: llm
+      sourceHandle: source
+      target: parse_llm
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: http-request
+      id: parse_llm-source-remember-target
+      source: parse_llm
+      sourceHandle: source
+      target: remember
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: http-request
+        targetType: answer
+      id: remember-source-answer-target
+      source: remember
+      sourceHandle: source
+      target: answer
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: ''
+        title: 开始
+        type: start
+        variables:
+        - label: 你的名字
+          max_length: 24
+          options: []
+          required: true
+          type: text-input
+          variable: player_name
+      id: start
+      position:
+        x: 40
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        code: "import re\n\ndef main(player_name: str, query: str) -> dict:\n    def\
+          \ clean(s, limit):\n        s = (s or \"\").replace('\"', \"'\").replace(\"\
+          \\\\\", \"／\").replace(\"\\n\", \" \").replace(\"\\r\", \" \")\n       \
+          \ s = re.sub(r\"\\s+\", \" \", s).strip()\n        return s[:limit]\n  \
+          \  player = clean(player_name, 24) or \"无名客\"\n    action = clean(query,\
+          \ 200)\n    return {\n        \"player\": player,\n        \"action\": action,\n\
+          \        \"scope_title\": clean(\"记仇酒馆::\" + player, 200),\n        \"scope_summary\"\
+          : clean(\"玩家 \" + player + \" 在记仇酒馆的恩怨账本\", 300),\n        \"idem_key\"\
+          : clean(\"grudge-scope::\" + player, 200),\n        \"memory_query\": clean(player\
+          \ + \" 怒气\", 40),\n    }\n"
+        code_language: python3
+        desc: 清洗玩家输入，生成 JSON 安全的请求字段
+        outputs:
+          action:
+            children: null
+            type: string
+          idem_key:
+            children: null
+            type: string
+          memory_query:
+            children: null
+            type: string
+          player:
+            children: null
+            type: string
+          scope_summary:
+            children: null
+            type: string
+          scope_title:
+            children: null
+            type: string
+        title: 预处理输入
+        type: code
+        variables:
+        - value_selector:
+          - start
+          - player_name
+          value_type: string
+          variable: player_name
+        - value_selector:
+          - sys
+          - query
+          value_type: string
+          variable: query
+      id: prep
+      position:
+        x: 300
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        authorization:
+          type: no-auth
+        body:
+          data:
+          - key: ''
+            type: text
+            value: '{"title":"{{#prep.scope_title#}}","summary":"{{#prep.scope_summary#}}","idempotency_key":"{{#prep.idem_key#}}"}'
+          type: json
+        desc: ''
+        headers: ''
+        method: post
+        params: ''
+        retry_config:
+          enabled: false
+          exponential_backoff:
+            enabled: false
+            max_interval: 10000
+            multiplier: 2
+          max_retries: 1
+          retry_interval: 1000
+        timeout:
+          connect: 15
+          read: 60
+          write: 30
+        title: 创建/复用玩家账本
+        type: http-request
+        url: http://127.0.0.1:8000/v1/scopes
+      id: scope
+      position:
+        x: 560
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        code: "import json\n\ndef main(body: str, status_code: int) -> dict:\n   \
+          \ scope_id = \"\"\n    try:\n        data = json.loads(body)\n        scope_id\
+          \ = data.get(\"scope_id\") or \"\"\n    except Exception:\n        scope_id\
+          \ = \"\"\n    return {\n        \"scope_id\": str(scope_id),\n        \"\
+          scope_ok\": \"yes\" if scope_id else \"no\",\n        \"scope_raw\": str(body)[:300],\n\
+          \    }\n"
+        code_language: python3
+        desc: 从 PowerContext 响应中取出 scope_id
+        outputs:
+          scope_id:
+            children: null
+            type: string
+          scope_ok:
+            children: null
+            type: string
+          scope_raw:
+            children: null
+            type: string
+        title: 解析账本 ID
+        type: code
+        variables:
+        - value_selector:
+          - scope
+          - body
+          value_type: string
+          variable: body
+        - value_selector:
+          - scope
+          - status_code
+          value_type: number
+          variable: status_code
+      id: parse_scope
+      position:
+        x: 820
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        authorization:
+          type: no-auth
+        body:
+          data:
+          - key: ''
+            type: text
+            value: '{"scope_id":"{{#parse_scope.scope_id#}}","query":"{{#prep.memory_query#}}","limit":50,"mode":"auto"}'
+          type: json
+        desc: ''
+        headers: ''
+        method: post
+        params: ''
+        retry_config:
+          enabled: false
+          exponential_backoff:
+            enabled: false
+            max_interval: 10000
+            multiplier: 2
+          max_retries: 1
+          retry_interval: 1000
+        timeout:
+          connect: 15
+          read: 60
+          write: 30
+        title: 召回旧账
+        type: http-request
+        url: http://127.0.0.1:8000/v1/memory/search
+      id: recall
+      position:
+        x: 1080
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        code: "import json\nimport re\n\ndef main(body: str, status_code: int) ->\
+          \ dict:\n    hits = []\n    try:\n        data = json.loads(body)\n    \
+          \    hits = data.get(\"hits\") or []\n    except Exception:\n        hits\
+          \ = []\n    seen = set()\n    lines = []\n    total = 0\n    for hit in\
+          \ hits:\n        text = str(hit.get(\"text\") or \"\").strip()\n       \
+          \ if not text or text in seen:\n            continue\n        seen.add(text)\n\
+          \        match = re.search(r\"怒气\\s*[+＋]\\s*(\\d+)\", text)\n        if\
+          \ match:\n            total += int(match.group(1))\n        lines.append(\"\
+          · \" + text)\n    if not lines:\n        lines = [\"（账本还是空的，老周暂时没把你放在眼里）\"\
+          ]\n    return {\n        \"memory_count\": len(seen),\n        \"grudge_total\"\
+          : total,\n        \"ledger\": \"\\n\".join(lines[:6]),\n        \"recall_ok\"\
+          : \"yes\" if hits else \"no\",\n    }\n"
+        code_language: python3
+        desc: 汇总历史恶作剧与累计怒气
+        outputs:
+          grudge_total:
+            children: null
+            type: number
+          ledger:
+            children: null
+            type: string
+          memory_count:
+            children: null
+            type: number
+          recall_ok:
+            children: null
+            type: string
+        title: 整理旧账
+        type: code
+        variables:
+        - value_selector:
+          - recall
+          - body
+          value_type: string
+          variable: body
+        - value_selector:
+          - recall
+          - status_code
+          value_type: number
+          variable: status_code
+      id: parse_recall
+      position:
+        x: 1340
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        dataset_ids:
+        - MXu6fmIyxZgxATD1VwC4RCZ6hs/5dqg3gnwUwkqE94Zr5MtNfEtqZU27qXBnjgW3
+        desc: 从 seekdb 向量库检索对应招式
+        multiple_retrieval_config:
+          reranking_enable: false
+          reranking_model:
+            reranking_model_name: ''
+            reranking_provider_name: ''
+          score_threshold: null
+          score_threshold_enabled: false
+          top_k: 3
+        query_variable_selector:
+        - prep
+        - action
+        retrieval_mode: multiple
+        title: 检索恶作剧图鉴
+        type: knowledge-retrieval
+      id: kb
+      position:
+        x: 1600
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - kb
+          - result
+        desc: 结合旧账与图鉴扮演老周，输出结构化判定
+        memory:
+          query_prompt_template: '{{#sys.query#}}'
+          window:
+            enabled: false
+            size: 10
+        model:
+          completion_params:
+            max_tokens: 700
+            temperature: 0.6
+          mode: chat
+          name: qwen2.5:7b
+          provider: langgenius/openai_api_compatible/openai_api_compatible
+        prompt_template:
+        - role: system
+          text: '你是"老周"，城南"记仇酒馆"的老板，五十多岁，嘴硬心软，记性极好。玩家会在酒馆里对你搞恶作剧。你要根据【旧账】和【恶作剧图鉴】做出反应。
+
+
+            规则：
+
+            1. 如果【旧账】里有玩家以前干过的事，必须明确提起（"上次你……"），语气要像真的记仇。
+
+            2. 累计怒气越高，态度越差；达到 8 时你会主动报复（比如往酒里加料、拿出擀面杖）；达到 15 时你会下"通缉令"。
+
+            3. 回复用中文口语，80 字以内，有画面感，不要解释规则。
+
+            4. 玩家如果道歉并请客，可以和解（grudge_delta 记 0）。
+
+            5. 只输出一个 JSON 对象，不要 Markdown 代码块，不要多余文字：
+
+            {"reply":"老周的台词","verdict":"记仇|暴怒|和解|无感","grudge_delta":0,"memory":"第三人称总结：玩家做了什么、老周怎么反应、怒气+几"}
+
+            grudge_delta 取 0-5 的整数，恶作剧越过分越高。
+
+
+            【玩家】{{#prep.player#}}
+
+            【旧账】{{#parse_recall.ledger#}}
+
+            【累计怒气】{{#parse_recall.grudge_total#}}
+
+            【恶作剧图鉴】
+
+            {{#context#}}'
+        - role: user
+          text: '{{#sys.query#}}'
+        title: 老周开口
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      id: llm
+      position:
+        x: 1860
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        code: "import json\nimport re\n\ndef main(raw: str, player: str, action: str,\
+          \ grudge_total: int, knowledge: object) -> dict:\n    text = raw or \"\"\
+          \n    data = None\n    for candidate in re.findall(r\"\\{.*\\}\", text,\
+          \ re.S):\n        try:\n            data = json.loads(candidate)\n     \
+          \       break\n        except Exception:\n            continue\n    reply\
+          \ = \"\"\n    verdict = \"记仇\"\n    delta = 2\n    memory = \"\"\n    if\
+          \ isinstance(data, dict):\n        reply = str(data.get(\"reply\") or \"\
+          \").strip()\n        verdict = str(data.get(\"verdict\") or \"记仇\").strip()\n\
+          \        try:\n            delta = int(data.get(\"grudge_delta\", 2))\n\
+          \        except Exception:\n            delta = 2\n        memory = str(data.get(\"\
+          memory\") or \"\").strip()\n    if not reply:\n        reply = re.sub(r\"\
+          \\{.*\\}\", \"\", text, flags=re.S).strip() or \"老周没说话，只是把抹布拧得更紧了。\"\n \
+          \   delta = max(0, min(5, delta))\n\n    def clean(s, limit):\n        s\
+          \ = (s or \"\").replace('\"', \"'\").replace(\"\\\\\", \"／\").replace(\"\
+          \\n\", \" \").replace(\"\\r\", \" \").strip()\n        return s[:limit]\n\
+          \n    reply = clean(reply, 160)\n    verdict = clean(verdict, 12)\n    if\
+          \ not memory:\n        memory = \"玩家【\" + player + \"】对老周做了：\" + action\
+          \ + \"。老周的反应：\" + reply + \"。怒气+\" + str(delta) + \"。\"\n    if \"怒气\" not\
+          \ in memory:\n        memory = memory + \"（怒气 +\" + str(delta) + \"）\"\n\
+          \    memory = clean(memory, 700)\n    titles = []\n    seen_titles = set()\n\
+          \    if isinstance(knowledge, list):\n        for item in knowledge[:3]:\n\
+          \            if isinstance(item, dict):\n                meta = item.get(\"\
+          metadata\") or {}\n                title = meta.get(\"title\") or item.get(\"\
+          title\")\n                if title and str(title) not in seen_titles:\n\
+          \                    seen_titles.add(str(title))\n                    titles.append(str(title))\n\
+          \    kb = \"、\".join(titles) if titles else \"未命中图鉴\"\n    total = max(0,\
+          \ int(grudge_total or 0)) + delta\n    if total >= 15:\n        threat =\
+          \ \"通缉令\"\n    elif total >= 8:\n        threat = \"擀面杖\"\n    elif total\
+          \ >= 4:\n        threat = \"冷脸\"\n    else:\n        threat = \"装没事\"\n\
+          \    return {\n        \"reply\": reply,\n        \"verdict\": verdict,\n\
+          \        \"delta\": delta,\n        \"new_total\": total,\n        \"threat\"\
+          : threat,\n        \"memory_text\": memory,\n        \"kb_titles\": clean(kb,\
+          \ 120),\n    }\n"
+        code_language: python3
+        desc: 解析 JSON，计算怒气与升级状态
+        outputs:
+          delta:
+            children: null
+            type: number
+          kb_titles:
+            children: null
+            type: string
+          memory_text:
+            children: null
+            type: string
+          new_total:
+            children: null
+            type: number
+          reply:
+            children: null
+            type: string
+          threat:
+            children: null
+            type: string
+          verdict:
+            children: null
+            type: string
+        title: 解析老周的反应
+        type: code
+        variables:
+        - value_selector:
+          - llm
+          - text
+          value_type: string
+          variable: raw
+        - value_selector:
+          - prep
+          - player
+          value_type: string
+          variable: player
+        - value_selector:
+          - prep
+          - action
+          value_type: string
+          variable: action
+        - value_selector:
+          - parse_recall
+          - grudge_total
+          value_type: number
+          variable: grudge_total
+        - value_selector:
+          - kb
+          - result
+          value_type: array[object]
+          variable: knowledge
+      id: parse_llm
+      position:
+        x: 2120
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        authorization:
+          type: no-auth
+        body:
+          data:
+          - key: ''
+            type: text
+            value: '{"scope_id":"{{#parse_scope.scope_id#}}","kind":"grudge_event","text":"{{#parse_llm.memory_text#}}","reason":"玩家在记仇酒馆对老周实施恶作剧"}'
+          type: json
+        desc: ''
+        headers: ''
+        method: post
+        params: ''
+        retry_config:
+          enabled: false
+          exponential_backoff:
+            enabled: false
+            max_interval: 10000
+            multiplier: 2
+          max_retries: 1
+          retry_interval: 1000
+        timeout:
+          connect: 15
+          read: 60
+          write: 30
+        title: 写入长期记忆
+        type: http-request
+        url: http://127.0.0.1:8000/v1/memory/remember
+      id: remember
+      position:
+        x: 2380
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    - data:
+        answer: '🍺 老周把抹布往肩上一搭：
+
+
+          {{#parse_llm.reply#}}
+
+
+          ─────
+
+          😤 怒气值：{{#parse_llm.new_total#}}/100（本次 +{{#parse_llm.delta#}}）
+
+          🏷️ 判定：{{#parse_llm.verdict#}}｜老周状态：{{#parse_llm.threat#}}
+
+          🧠 PowerContext 翻出旧账：{{#parse_recall.memory_count#}} 笔
+
+          📖 seekdb 图鉴：{{#parse_llm.kb_titles#}}
+
+
+          📜 旧账摘录
+
+          {{#parse_recall.ledger#}}'
+        desc: ''
+        title: 酒馆现场
+        type: answer
+        variables: []
+      id: answer
+      position:
+        x: 2640
+        y: 320
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.7
+  rag_pipeline_variables: []

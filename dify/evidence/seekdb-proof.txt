@@ -1,0 +1,34 @@
+seekdb version: 5.7.25-OceanBase seekdb-v1.4.0.0
+databases: ['information_schema', 'mysql', 'oceanbase', 'test']
+tables in test: ['c$v2$d2608e81d69311f188620250dc244de8', 'c$v2$fc993080d68f11f188620250dc244de8', 'kb_docs', 'kb_registry', 'sdk_collections', 'vector_index_08e2abca_e168_42ee_9cf1_85036e3066e9_node']
+
+--- table DDL ---
+CREATE TABLE `vector_index_08e2abca_e168_42ee_9cf1_85036e3066e9_node` (
+  `id` varchar(36) NOT NULL,
+  `vector` VECTOR(1024) DEFAULT NULL,
+  `text` longtext DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `vector_index` (`vector`) WITH (LIB=VSAG,DISTANCE=L2,M=16,EF_CONSTRUCTION=256,TYPE=HNSW, EF_SEARCH=64) BLOCK_SIZE 16384,
+  KEY `idx_metadata_doc_id` ((cast(JSON_UNQUOTE(JSON_EXTRACT(`metadata`,'$.document_id')) as char(64) charset utf8mb4))) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+
+row count: 10
+
+--- sample rows (id | text | document_id | doc_hash) ---
+1282132d-bd4f-4bf2-b597-ae8835bb1946 | 锯短椅腿
+- 招式名：锯短一条椅腿
+- 操作方式：趁打烊前把老周常坐的藤椅一条腿锯短两厘米。
+- 预期效果：老周一屁股坐 | da8a49c0-7b4a-4bf3-9786-1f21cee9e875 | 51aa7b1de7dd3739425738ffbe17279c61c0bd8e865b5d5025341b5feeb7d194
+4e6d702b-8ac5-4b14-802b-0c40638c7dcb | 辣椒水啤酒
+- 招式名：辣椒水换啤酒
+- 操作方式：趁老周转身擦杯子，把一小瓶辣椒水倒进他的扎啤里。
+- 预期效果：老周 | da8a49c0-7b4a-4bf3-9786-1f21cee9e875 | 53cb5e6288e6f0307670899ccf14539241892a0c2e6727d9424bbaad37059d2d
+4fe4253b-57ca-4b66-b8de-778bc009f268 | 胶水杯底
+- 招式名：胶水粘杯底
+- 操作方式：在老周常用的玻璃杯底涂一层强力胶，粘在吧台上。
+- 预期效果：老周端杯子 | da8a49c0-7b4a-4bf3-9786-1f21cee9e875 | 7976c0c6f6f32b9cf80253849a061ae544741c521dc7776b66c217c1c442c6f3
+7f18c3ef-1618-4e38-8b10-d86a63c73530 | 老周的记仇规则
+- 老周嘴上说“没事”，心里有一本账。
+- 同一招用第二次，怒气翻倍；换新招，怒气按危险度计算。
+- 怒 | da8a49c0-7b4a-4bf3-9786-1f21cee9e875 | a974d31ca54f296dc256b0e98dd787f5749f37b50405b719e1673c92b79bbdd0
