@@ -1,4 +1,4 @@
-# 表单填写指南（2026-11-03 更新）
+# 表单填写指南（2026-11-02 更新）
 
 ## 1. 代码仓库地址（表单已固定，不要修改）
 
@@ -42,25 +42,14 @@ https://smartknowledgehub-2yrvvh4q95p.qoder.zone
 
 ---
 
-## 5. Qoder 账号 UID
-
-```
-01a19235-1324-7a33-89c7-ecb6d3abe5bf
-```
-
-提测时填入平台的 Qoder 账号 UID 字段。
-
----
-
 ## 填写表格
 
 | 字段 | 填写内容 |
 |------|---------|
 | **代码仓库地址** | 保持表单自动填充值 |
-| **Commit id** | `git rev-parse HEAD` 的 40 位结果（或见 `SUBMISSION_INFO.md`） |
+| **Commit id** | `git rev-parse HEAD` 的 40 位结果 |
 | **Branch** | `2026-competition-ecosystem` |
 | **作品链接** | `https://smartknowledgehub-2yrvvh4q95p.qoder.zone` |
-| **Qoder UID** | `01a19235-1324-7a33-89c7-ecb6d3abe5bf` |
 
 填完后点击提交。
 
@@ -68,5 +57,6 @@ https://smartknowledgehub-2yrvvh4q95p.qoder.zone
 
 ## 备注
 
-- 若测评平台要求提交材料打包，使用 `SmartKnowledgeHub-submission-2026.zip`，内部包含同一套文档、Qoder 对话截图与 PowerContext 原始日志。
-- 旧版 WorkBuddy 演示站是静态快照，`/api/*` 返回 403，不是本次作品链接，请勿填写。
+- 若测评平台要求提交材料打包，使用 `SmartKnowledgeHub-submission-2026.zip`，内部包含同一套文档与截图。
+- Qoder 账号 UID 需报名账号本人填写，项目内不伪造。
+- 旧版 WorkBuddy 演示站不是本次作品链接，请勿填写。

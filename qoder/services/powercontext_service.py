@@ -8,9 +8,8 @@ PowerContext 服务模块
 - local：本地 SQLite 兼容实现（Scope 隔离、Memory、Search、Recall 的语义对齐），
   用于没有 PowerContext 服务的离线演示
 
-POWERCONTEXT_MODE=remote（默认）时强制使用真实服务，不可达会直接报错；
-POWERCONTEXT_MODE=auto 时优先使用真实服务，探测失败才退回本地；
-POWERCONTEXT_MODE=local 仅用于离线预览页面，验收时必须使用 remote。
+POWERCONTEXT_MODE=remote（默认）强制连接真实服务，不可达直接报错，避免静默降级；
+POWERCONTEXT_MODE=auto 才在探测失败时退回本地；POWERCONTEXT_MODE=local 仅供离线演示。
 """
 
 import sqlite3
@@ -35,7 +34,9 @@ class PowerContextService:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self._init_db()
 
-        requested = (mode or os.getenv('POWERCONTEXT_MODE', 'remote')).strip().lower()
+        requested = (mode or os.getenv('POWERCONTEXT_MODE', 'remote') or 'remote').strip().lower()
+        if requested not in ('remote', 'auto', 'local'):
+            requested = 'remote'
         self.base_url = base_url or os.getenv('POWERCONTEXT_BASE_URL', 'http://127.0.0.1:8000')
         self._remote_client = None
         self.mode = 'local'

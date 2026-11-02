@@ -542,7 +542,7 @@ Qoder: 可能的原因：
 
 **处理**：
 1. 接入真实 PowerContext Server 1.4.1：新增 `services/powercontext_remote.py`，通过 HTTP 调用 `/v1/scopes`、`/v1/memory/remember`、`/v1/memory/search`、`/v1/memory/entries/*`、`/v1/context/prepare`。
-2. 记忆服务改为 remote 优先、local 兜底（`POWERCONTEXT_MODE=auto|remote|local`），健康检查和仪表盘显示真实后端。
+2. 记忆服务改为 remote 默认、local 仅离线演示（`POWERCONTEXT_MODE=remote|auto|local`，默认强制 remote），健康检查和仪表盘显示真实后端。
 3. seekdb 不再伪装：明确为“本地 SQLite + FTS5 兼容检索层”，`/api/health` 直接标注，`vector_score` 固定 0.0，边界写入 `docs/TECHNICAL_BOUNDARIES.md`。
 
 **排错记录**：
@@ -581,39 +581,31 @@ Qoder: 可能的原因：
 - 更新 `SUBMISSION_CHECKLIST.md`、`FORM_FILING_GUIDE.md`。
 - 重新生成提交压缩包 `SmartKnowledgeHub-submission-2026.zip`。
 
----
+### 11.5 再验修复：默认 remote、口径与日志证据
 
-## 十二、验收补强（2026-11-03）
+**问题 1：默认模式仍是 auto，服务不可达会静默回退。**
 
-按最新验收意见补齐证据与运行约束。
+修复：`POWERCONTEXT_MODE` 默认值改为 `remote`，启动时探测失败直接抛错；只有显式 `auto` 才允许回退，`local` 仅用于离线演示。README / RUNNING / 展示页同步改写。
 
-### 12.1 Qoder 开发过程证据
+**问题 2：远程写入仍按旧版 citation 协议。**
 
-- 新增 `docs/qoder-sessions/`：需求拆解、编码实现、调试排错三类截图，附可核对的 HTML 原文。
-- 截图内容来自本机 Qoder 会话记录，保留真实决策与报错，移除令牌等敏感信息。
-- 展示页新增「Qoder 对话证据」区块并重新发布。
+1.4.1 的 `/v1/memory/entries/revise` 与 `/v1/memory/entries/retire` 已标记为 unsupported，返回的条目结构是 `artifact + state_version`，不再带 `citation`。原客户端会在第二次保存同一 kind 时抛 `KeyError: citation`。
 
-### 12.2 真实调用日志
+修复：
+- 更新改为 `PUT /v1/scopes/{scope_id}/artifacts/atomic-memory/{artifact_id}`，带 `If-Match: "revision:N"`，冲突时重读后重试一次。
+- 列表按 `artifact.revision` 取同 kind 最新版本。
+- 搜索适配 `hits[].memory` 结构，同时保留旧版 `citation` 形状的兼容分支。
+- 退役改用 `/v1/atomic-memory/lifecycle`（`state=forgotten`）。
 
-- 新增 `tools/capture_powercontext_log.py`，直接请求真实服务并记录原始请求/响应。
-- 日志：`docs/logs/powercontext-calls-2026-11-03.log`，覆盖 `/v1/scopes`、`/v1/memory/remember`、`/v1/memory/search`、`/v1/context/prepare`、`/v1/memory/entries/retire`、`/v1/memory/entries/list`。
-- 实测作用域 `scp_1grbwtytbjp9ejqwnd4pw6d7gx`；搜索返回 `mode: "fts"`；retire 后状态为 `inactive`。
+**问题 3：展示页与仓库口径不一致、线上接口不可用。**
 
-### 12.3 运行约束调整
+修复：展示页顶部增加「本页是静态快照」提示，移除指向其他应用的「打开在线演示」按钮，统一表述为「PowerContext 真实服务 + SQLite FTS5 兼容检索层」；`/api/health` 明确返回 `retrieval` 与「未连接 seekdb 服务」。本地新增 `/api/stats` 别名。
 
-- `POWERCONTEXT_MODE` 默认值由 `auto` 改为 `remote`；服务不可达时直接报错，不再静默回退。
-- `RUNNING.md` 第 3 节改为「必选」，`local` 仅用于离线预览。
-- 已用无效地址验证：默认模式会抛出明确错误并要求先启动 PowerContext。
+**问题 4：只有截图，没有可核对日志。**
 
-### 12.4 文案与演示站
+修复：新增 `docs/evidence/remote-run.log`、`docs/evidence/api-samples.log` 和 `docs/evidence/README.md`，记录 2026-11-03 本机真实响应；其中 `search_history` 的 `artifact.revision` 递增到 4，可直接证明写入走真实服务。
 
-- 展示页、`SUBMISSION_CHECKLIST.md` 中的检索能力统一写成「SQLite FTS5 兼容检索层」，不再暗示已连接 seekdb。
-- 旧版 WorkBuddy 演示站标注为「静态快照，`/api/*` 返回 403」，不作为运行验收依据。
-
-### 12.5 提交信息
-
-- Qoder UID：`01a19235-1324-7a33-89c7-ecb6d3abe5bf`
-- 作品链接：https://smartknowledgehub-2yrvvh4q95p.qoder.zone
+**实测**：`init_db.py` 在 remote 模式下完成 12 篇文档、6 条记忆、6 条召回；`/api/health` 返回 `mode: remote`、`version: 1.1.1`；`/api/stats` 返回 200。
 
 ---
 
@@ -631,7 +623,7 @@ Qoder: 可能的原因：
 
 - **开发者**: [您的名字]
 - **邮箱**: [您的邮箱]
-- **Qoder UID**: `01a19235-1324-7a33-89c7-ecb6d3abe5bf`
+- **Qoder UID**: [您的 UID]
 
 ### C. 开发时间线
 

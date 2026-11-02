@@ -1,0 +1,35 @@
+Smart Knowledge Hub · 本机真实运行日志
+生成时间：2026-11-03 00:55 (CST)
+主机：Windows 11 26200 / Python 3.10.11 (Flask) / PowerContext 1.4.1
+模式：POWERCONTEXT_MODE=remote，POWERCONTEXT_BASE_URL=http://127.0.0.1:8001
+说明：search_history 的 artifact revision 递增，证明更新走真实服务的 If-Match 修订，而不是本地 SQLite。
+
+==============================================================================
+PowerContext Server 启动（服务端日志节选）
+==============================================================================
+2026-11-03T00:53:27+0800 INFO powercontext.server.factory PowerContext Server is ready event="server.ready" unit="server" service_name="powercontext-server" service_version="1.4.1" service_instance_id="18b30221a2804d238240821f5f25753d" service_role="all"
+2026-11-03T00:53:27+0800 INFO uvicorn Application startup complete. service_name="powercontext-server" service_version="1.4.1" service_instance_id="18b30221a2804d238240821f5f25753d" service_role="all"
+2026-11-03T00:53:27+0800 INFO uvicorn Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit) service_name="powercontext-server" service_version="1.4.1" service_instance_id="18b30221a2804d238240821f5f25753d" service_role="all"
+
+==============================================================================
+Flask 应用启动（app-remote.log 节选）
+==============================================================================
+============================================================
+智能知识库 - Smart Knowledge Hub
+============================================================
+检索层: SQLite FTS5 兼容检索层（未连接 seekdb 服务）
+PowerContext: remote (API v1.4（PowerContext Server 1.4.1）)
+访问地址: http://localhost:5000
+============================================================
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.105:5000
+Press CTRL+C to quit
+
+==============================================================================
+健康检查（运行时）
+==============================================================================
+{"status":"ready","checks":{"runtime":"ready","database":"ready","artifact_processing_supervisor":"disabled","access_mode":"disabled","authentication_provider":"disabled","access_provider":"disabled","access_resource_kinds":"server,scope,artifact","access_artifact_families":"atomic-memory:enabled,experience:enabled,handoff:enabled,memory:enabled,profile:enabled,prompt:enabled,skill:enabled"}}

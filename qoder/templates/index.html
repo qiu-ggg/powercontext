@@ -113,7 +113,7 @@
                 </div>
                 <div class="tech-desc-item">
                     <h4>PowerContext 的作用</h4>
-                    <p>用户上下文记忆由 PowerContext 管理：按用户隔离 Scope，学习进度、搜索历史、浏览记录与偏好以 Atomic Memory 写入。启动 PowerContext Server 时通过 HTTP 调用真实服务（1.4.1），服务不可达时回退到本地兼容实现，页面顶部会显示当前实际后端。</p>
+                    <p>用户上下文记忆由 PowerContext 管理：按用户隔离 Scope，学习进度、搜索历史、浏览记录与偏好以 Atomic Memory 写入。默认 <code>POWERCONTEXT_MODE=remote</code>，所有读写通过 HTTP 调用真实服务（1.4.1），不可达直接报错；页面顶部会显示当前实际后端。</p>
                 </div>
             </div>
         </div>

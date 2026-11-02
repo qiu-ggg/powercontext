@@ -1,7 +1,7 @@
 """
 Flask 主应用
 智能知识库 - Smart Knowledge Hub
-基于 seekdb + PowerContext 的智能学习与科研助手
+PowerContext 真实服务 + SQLite FTS5 兼容检索层
 """
 
 from flask import Flask, request, jsonify, render_template
@@ -48,8 +48,9 @@ def register_routes(app):
         return jsonify({
             'status': 'ok',
             'service': 'Smart Knowledge Hub',
-            'version': '1.1.0',
-            'seekdb': '本地 SQLite + FTS5（seekdb 兼容检索层）',
+            'version': '1.1.1',
+            'retrieval': 'SQLite FTS5 兼容检索层（未连接 seekdb 服务）',
+            'seekdb': '未连接 seekdb 服务；检索由 SQLite FTS5 兼容层完成',
             'powercontext': ctx['mode'],
             'powercontext_detail': ctx
         })
@@ -224,6 +225,7 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/statistics', methods=['GET'])
+    @app.route('/api/stats', methods=['GET'])
     def get_statistics():
         try:
             stats = knowledge_service.seekdb.get_statistics()
@@ -262,7 +264,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print("智能知识库 - Smart Knowledge Hub")
     print("=" * 60)
-    print(f"seekdb: 本地 SQLite + FTS5（seekdb 兼容检索层）")
+    print("检索层: SQLite FTS5 兼容检索层（未连接 seekdb 服务）")
     ctx = powercontext_service.describe()
     print(f"PowerContext: {ctx['mode']} ({ctx['version']})")
     if ctx.get('fallback_reason'):

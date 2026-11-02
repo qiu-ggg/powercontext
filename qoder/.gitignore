@@ -47,6 +47,7 @@ Thumbs.db
 
 # 日志
 *.log
+!docs/evidence/*.log
 
 # 数据库
 data/
@@ -57,7 +58,3 @@ data/
 *.tmp
 *.bak
 *.cache
-
-# 提交与验证补充
-!docs/logs/*.log
-*.zip

@@ -33,15 +33,17 @@ class RemotePowerContextClient:
 
     # ---------- 底层 HTTP ----------
 
-    def _request(self, method, path, payload=None, timeout=None):
+    def _request(self, method, path, payload=None, timeout=None, headers=None):
         url = f"{self.base_url}{path}"
         data = None
-        headers = {'Accept': 'application/json'}
+        req_headers = {'Accept': 'application/json'}
+        if headers:
+            req_headers.update(headers)
         if payload is not None:
             data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            headers['Content-Type'] = 'application/json; charset=utf-8'
+            req_headers['Content-Type'] = 'application/json; charset=utf-8'
 
-        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        req = urllib.request.Request(url, data=data, headers=req_headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=timeout or self.timeout) as resp:
                 body = resp.read().decode('utf-8')
@@ -100,37 +102,48 @@ class RemotePowerContextClient:
         if not matched:
             return None
         # 同一 kind 若有多个活动条目，取版本最高的
-        return max(matched, key=lambda e: e.get('version', 0))
+        return max(matched, key=RemotePowerContextClient._entry_revision)
 
-    def _citation(self, entry):
-        return entry['citation']
+    @staticmethod
+    def _entry_revision(entry):
+        artifact = entry.get('artifact') or {}
+        return artifact.get('revision') or entry.get('version') or 1
+
+    @staticmethod
+    def _artifact(entry):
+        return entry.get('artifact') or entry.get('citation') or {}
 
     def save(self, user_id, kind, text, reason=None):
-        """按 kind 写入记忆；已存在则 revise，不存在则 remember"""
+        """按 kind 写入记忆；已存在则按 If-Match 提交下一修订"""
         scope_id = self.ensure_scope(user_id)
         entry = self._pick_entry(self._list_entries(user_id), kind)
 
-        if entry:
-            payload = {
-                'scope_id': scope_id,
-                'citation': self._citation(entry),
-                'kind': kind,
-                'text': text,
-                'reason': reason,
-            }
-            try:
-                return self._request('POST', '/v1/memory/entries/revise', payload)
-            except PowerContextRemoteError as e:
-                if getattr(e, 'status', None) != 409:
-                    raise
-                # 版本冲突：重新读取后再改一次
-                entry = self._pick_entry(self._list_entries(user_id), kind)
-                if not entry:
-                    return self._remember(scope_id, kind, text, reason)
-                payload['citation'] = self._citation(entry)
-                return self._request('POST', '/v1/memory/entries/revise', payload)
+        if not entry:
+            return self._remember(scope_id, kind, text, reason)
 
-        return self._remember(scope_id, kind, text, reason)
+        try:
+            return self._replace(scope_id, entry, kind, text)
+        except PowerContextRemoteError as e:
+            if getattr(e, 'status', None) not in (409, 412, 428):
+                raise
+            # 版本冲突：重新读取后重试一次
+            entry = self._pick_entry(self._list_entries(user_id), kind)
+            if not entry:
+                return self._remember(scope_id, kind, text, reason)
+            return self._replace(scope_id, entry, kind, text)
+
+    def _replace(self, scope_id, entry, kind, text):
+        artifact = self._artifact(entry)
+        artifact_id = artifact.get('artifact_id')
+        revision = self._entry_revision(entry)
+        if not artifact_id:
+            raise PowerContextRemoteError('记忆条目缺少 artifact_id，无法更新')
+        return self._request(
+            'PUT',
+            f'/v1/scopes/{scope_id}/artifacts/atomic-memory/{artifact_id}',
+            {'content': {'kind': kind, 'text': text}},
+            headers={'If-Match': f'"revision:{revision}"'},
+        )
 
     def _remember(self, scope_id, kind, text, reason=None):
         payload = {
@@ -163,10 +176,14 @@ class RemotePowerContextClient:
         entry = self._pick_entry(self._list_entries(user_id), kind)
         if not entry:
             return False
-        self._request('POST', '/v1/memory/entries/retire', {
+        artifact = self._artifact(entry)
+        self._request('POST', '/v1/atomic-memory/lifecycle', {
             'scope_id': scope_id,
-            'citation': self._citation(entry),
-            'reason': reason,
+            'target': {
+                'artifact': artifact,
+                'state_version': entry.get('state_version', 0),
+            },
+            'state': 'forgotten',
         })
         return True
 
@@ -179,22 +196,27 @@ class RemotePowerContextClient:
             'limit': max(1, min(limit, 50)),
         })
 
-        # 搜索结果只带 citation，再用列表补上 kind
-        kind_by_entry = {}
-        for entry in self._list_entries(user_id):
-            entry_id = (entry.get('citation') or {}).get('entry_id')
-            if entry_id:
-                kind_by_entry[entry_id] = entry.get('kind', '')
-
         results = []
         for hit in data.get('hits') or []:
-            entry_id = (hit.get('citation') or {}).get('entry_id', '')
-            text = hit.get('text', '')
+            memory = hit.get('memory') or {}
+            if memory:
+                artifact = memory.get('artifact') or {}
+                results.append({
+                    'artifact_id': artifact.get('artifact_id', ''),
+                    'kind': memory.get('kind', ''),
+                    'description': '',
+                    'content': self._decode(memory.get('text', '')),
+                    'score': hit.get('score', 0.0),
+                    'mode': data.get('mode', ''),
+                })
+                continue
+            # 兼容旧版 citation 形状
+            citation = hit.get('citation') or {}
             results.append({
-                'artifact_id': kind_by_entry.get(entry_id) or entry_id,
-                'kind': kind_by_entry.get(entry_id, 'memory'),
+                'artifact_id': citation.get('entry_id', ''),
+                'kind': hit.get('kind', 'memory'),
                 'description': '',
-                'content': self._decode(text),
+                'content': self._decode(hit.get('text', '')),
                 'score': hit.get('score', 0.0),
                 'mode': data.get('mode', ''),
             })

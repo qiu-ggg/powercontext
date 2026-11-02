@@ -5,7 +5,7 @@
 - 12 篇示例资料可全文检索，支持分类过滤与相关度排序
 - 学习进度、搜索历史、浏览时长、偏好设置按用户隔离保存
 - 仪表盘展示学习统计、继续学习、最近搜索和上下文召回
-- 上下文记忆接入真实的 **PowerContext Server 1.4.1**（HTTP API v1.4），默认强制使用真实服务（`POWERCONTEXT_MODE=remote`），页面会明确显示当前后端
+- 上下文记忆接入真实的 **PowerContext Server 1.4.1**（HTTP API v1.4）：默认 `POWERCONTEXT_MODE=remote`，服务不可达直接报错，不静默降级
 
 ## 技术栈
 
@@ -13,12 +13,22 @@
 |------|------|----------|
 | 后端 | Python Flask | REST API + 服务端渲染 |
 | 前端 | HTML + CSS + JavaScript | 响应式，无前端构建步骤 |
-| 检索层 | SQLite + FTS5 | SQLite FTS5 兼容检索层；不连接 seekdb 服务，向量检索为预留字段 |
-| 上下文服务 | PowerContext Server 1.4.1 | 默认 `POWERCONTEXT_MODE=remote`，记忆读写与搜索全部走真实 HTTP 服务 |
-| 展示页 | Qoder Sites | https://smartknowledgehub-2yrvvh4q95p.qoder.zone |
-| 旧演示站 | WorkBuddy | 静态快照，`/api/*` 不可用；不作为本次验收依据 |
+| 检索层 | SQLite + FTS5 | seekdb 兼容检索层，**未连接 seekdb 服务**；向量检索为预留字段 |
+| 上下文服务 | PowerContext Server 1.4.1 | 默认 `POWERCONTEXT_MODE=remote`，不可达直接报错；显式 `auto`/`local` 才使用本地兼容实现 |
+| 展示页 | Qoder Sites | https://smartknowledgehub-2yrvvh4q95p.qoder.zone （静态快照，功能需本地运行） |
+| 应用部署 | WorkBuddy | 线上演示需要 Python 运行时 |
 
 详细边界与验证记录见 [docs/TECHNICAL_BOUNDARIES.md](docs/TECHNICAL_BOUNDARIES.md)。
+
+## 验证证据
+
+`docs/evidence/` 保存了 2026-11-03 在本机（PowerContext 1.4.1）跑出的真实日志：
+
+- `remote-run.log`：服务端与 Flask 启动日志、`/health/ready` 返回
+- `api-samples.log`：12 个真实 HTTP 响应，含记忆列表与 `artifact.revision` 递增
+- `README.md`：文件说明与复现命令
+
+展示页 https://smartknowledgehub-2yrvvh4q95p.qoder.zone 是 **静态快照**，不运行 Flask/PowerContext，`/api/*` 在该域名下不可用；功能需按 [RUNNING.md](RUNNING.md) 本地启动。
 
 ## PowerContext 接入方式
 
@@ -26,9 +36,9 @@
 
 | `POWERCONTEXT_MODE` | 行为 |
 |------|------|
-| `remote`（默认） | 使用真实服务；不可达时直接报错，避免静默降级 |
+| `remote`（默认） | 强制真实服务；启动时即探测，不可达直接报错，避免静默降级 |
 | `auto` | 启动时探测 `POWERCONTEXT_BASE_URL`，可用则使用真实服务，否则回退本地 SQLite 实现 |
-| `local` | 本地兼容实现，仅用于离线预览页面 |
+| `local` | 使用本地兼容实现，仅用于离线演示 |
 
 真实服务上调用的接口：
 
@@ -47,15 +57,15 @@
 
 ## 快速开始
 
-环境要求：Python 3.8+（运行 Flask 应用）；真实 PowerContext 服务需要 Python 3.11+，启动步骤见 [RUNNING.md](RUNNING.md) 第 3 节（必选）。
+环境要求：Python 3.8+（运行 Flask 应用）；如需真实 PowerContext 服务，另需 Python 3.11+。
 
 ```bash
 pip install -r requirements.txt
-python init_db.py          # 需先启动 PowerContext Server
+python init_db.py          # 创建 SQLite 检索库并写入 12 篇示例文档
 python app.py              # http://localhost:5000
 ```
 
-默认 `POWERCONTEXT_MODE=remote`：真实服务不可达时应用会拒绝启动，避免把本地实现误认为真实服务。仅离线预览界面时才设置 `POWERCONTEXT_MODE=local`。
+以上命令默认 `POWERCONTEXT_MODE=remote`：本机 8000 端口没有 PowerContext 服务时启动会直接报错，请先按 [RUNNING.md](RUNNING.md) 启动服务；仅离线体验时显式设置 `POWERCONTEXT_MODE=local`。
 
 ## 项目结构
 
@@ -75,15 +85,10 @@ SmartKnowledgeHub/
 ├── web/                            # Qoder Sites 展示页（静态）
 ├── docs/
 │   ├── TECHNICAL_BOUNDARIES.md     # 技术真实性与边界说明
-│   ├── screenshots/                # 实机截图
-│   ├── qoder-sessions/             # Qoder 对话证据（需求拆解 / 编码 / 调试）
-│   └── logs/                       # PowerContext 原始 HTTP 调用日志
-├── tools/
-│   └── capture_powercontext_log.py # 原始调用日志采集脚本
+│   └── screenshots/                # 实机截图
 ├── RUNNING.md
 ├── QUICKSTART.md
 ├── QODER_DEVELOPMENT_LOG.md
-├── SUBMISSION_INFO.md
 └── SUBMISSION_CHECKLIST.md
 ```
 
@@ -140,22 +145,15 @@ SmartKnowledgeHub/
 
 - 学习时长长期为 0：`sendBeacon` 发往只允许 GET 的接口返回 405；已支持 POST，并让分析接口汇总 `view_duration`
 - 相关文档被记为搜索、出现重复历史：相关推荐请求改为 `record=0`；相同查询 30 秒内只保留一条
-- 技术真实性：新增真实 PowerContext 远程客户端；检索侧如实标注为 SQLite FTS5 兼容检索层
-
-## Qoder 开发证据
-
-- `docs/qoder-sessions/`：需求拆解、编码实现、调试排错三类对话截图（附 HTML 原文，敏感信息已移除）。
-- `docs/logs/powercontext-calls-2026-11-03.log`：真实 PowerContext 的原始 HTTP 请求与响应，覆盖 scope、remember、search、prepare、retire。
-- `docs/TECHNICAL_BOUNDARIES.md`：技术边界、实测记录与已知限制。
+- 技术真实性：新增真实 PowerContext 远程客户端；seekdb 一侧如实标注为本地 FTS5 检索层
 
 ## 提交信息
 
 - 仓库：https://github.com/qiu-ggg/powercontext
 - 分支：`2026-competition-ecosystem`
 - 作品目录：`qoder/`
-- Qoder UID：`01a19235-1324-7a33-89c7-ecb6d3abe5bf`
 - Qoder Sites：https://smartknowledgehub-2yrvvh4q95p.qoder.zone
-- 线上演示：https://grudge-tavern.apps.workbuddy.host/?sharecode=UNV2MJ3RH3（静态快照，`/api/*` 不可用，不作为本次验收依据）
+- 线上演示：https://grudge-tavern.apps.workbuddy.host/?sharecode=UNV2MJ3RH3（较早部署版本，最新代码以仓库为准）
 
 ## 许可证
 

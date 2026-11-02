@@ -7,7 +7,7 @@
 **项目名称**: 智能知识库 (Smart Knowledge Hub)  
 **项目位置**: `D:\SmartKnowledgeHub`  
 **开发时间**: 2026年11月  
-**技术栈**: Python Flask + seekdb + PowerContext
+**技术栈**: Python Flask + 真实 PowerContext 服务 + SQLite FTS5 兼容检索层
 
 ---
 
@@ -16,7 +16,7 @@
 ### 1️⃣ 智能检索系统
 
 **功能描述**:
-- 全文检索：基于 MySQL FULLTEXT 索引
+- 全文检索：基于 SQLite FTS5（unicode61 分词），作为 seekdb 兼容检索层
 - 语义检索：预留向量检索接口
 - 混合排序：可配置的权重融合算法
 - 分类过滤：支持按分类、时间筛选
@@ -67,7 +67,7 @@
 
 **技术实现**:
 - `knowledge_service.py` - 业务逻辑层
-- 整合 seekdb + PowerContext 数据
+- 整合 SQLite FTS5 兼容检索层 + 真实 PowerContext 服务
 - 智能推荐算法
 
 **使用方式**:
@@ -89,7 +89,7 @@
 
 **技术实现**:
 - PowerContext 存储用户行为
-- seekdb 提供文档元数据
+- SQLite FTS5 兼容检索层提供文档元数据
 - knowledge_service 整合两者
 
 ---
@@ -135,7 +135,7 @@ Flask API
     ↓
 Knowledge Service
     ↓
-seekdb / PowerContext
+SQLite FTS5 兼容层 / PowerContext
     ↓
 返回数据
     ↓
@@ -153,7 +153,7 @@ seekdb / PowerContext
 | app.py | Flask 主应用 | ~200 |
 | config.py | 配置管理 | ~50 |
 | init_db.py | 数据库初始化 | ~150 |
-| services/seekdb_service.py | seekdb 服务 | ~150 |
+| services/seekdb_service.py | SQLite FTS5 兼容检索层 | ~150 |
 | services/powercontext_service.py | PowerContext 服务 | ~250 |
 | services/knowledge_service.py | 知识库服务 | ~200 |
 | services/__init__.py | 服务模块初始化 | ~20 |
@@ -435,7 +435,7 @@ curl "http://localhost:5000/api/dashboard/test"
 
 ### 1. 技术整合
 
-- ✅ seekdb 混合检索
+- ✅ SQLite FTS5 兼容检索层混合检索
 - ✅ PowerContext 记忆管理
 - ✅ Flask RESTful API
 - ✅ 响应式前端设计
@@ -493,12 +493,12 @@ curl "http://localhost:5000/api/dashboard/test"
 
 ## 📚 技术使用说明
 
-### seekdb 使用
+### 检索层使用（SQLite FTS5 兼容）
 
 **功能**:
-1. 全文检索 - MySQL FULLTEXT 索引
+1. 全文检索 - SQLite FTS5（unicode61 分词）
 2. 结构化查询 - 分类、时间过滤
-3. 混合检索 - 向量 + 文本（预留接口）
+3. 混合检索 - 文本检索 + 预留向量字段（vector_score 恒 0）
 
 **代码示例**:
 ```python
@@ -559,7 +559,7 @@ history = powercontext_service.get_search_history(
 | 实用价值 | 解决文献管理和学习追踪痛点 | ⭐⭐⭐⭐⭐ |
 | 使用效果 | 完整功能演示，待收集数据 | ⭐⭐⭐⭐ |
 | 完成度 | 主要流程完整，界面友好 | ⭐⭐⭐⭐⭐ |
-| 技术结合 | seekdb + PowerContext 深度整合 | ⭐⭐⭐⭐⭐ |
+| 技术结合 | PowerContext 真实服务 + SQLite FTS5 兼容检索层 | ⭐⭐⭐⭐ |
 | Qoder 实践 | 开发记录完整，效率提升59% | ⭐⭐⭐⭐⭐ |
 | 工程质量 | 代码清晰，文档完善 | ⭐⭐⭐⭐⭐ |
 
@@ -579,7 +579,7 @@ history = powercontext_service.get_search_history(
 **项目信息**:
 - 项目位置: `D:\SmartKnowledgeHub`
 - 开发工具: Qoder
-- 核心技术: seekdb + PowerContext
+- 核心技术: 真实 PowerContext 服务 + SQLite FTS5 兼容检索层
 
 **开发者信息**:
 - 姓名: [您的名字]
@@ -594,7 +594,7 @@ history = powercontext_service.get_search_history(
 ### 成果
 
 ✅ 完成了一个功能完整的智能知识库系统  
-✅ 成功整合 seekdb 和 PowerContext  
+✅ 接入真实 PowerContext 服务，并以 SQLite FTS5 兼容层实现检索  
 ✅ 提供了友好的用户界面和体验  
 ✅ 编写了完善的文档和说明  
 ✅ 使用 Qoder 大幅提升开发效率  

@@ -64,15 +64,15 @@ SmartKnowledgeHub/
 
 **配置项**:
 - Flask 配置（SECRET_KEY, DEBUG）
-- seekdb 数据库配置（主机、端口、用户名、密码、数据库名）
+- 检索层为本地 SQLite FTS5 兼容层，无 seekdb 连接配置
 - PowerContext 配置（API URL、API Key）
 - 文件上传配置（上传目录、文件大小限制、允许的文件类型）
 - 检索配置（向量权重、文本权重、结果数量限制）
 
-### 3. services/seekdb_service.py - seekdb 服务
+### 3. services/seekdb_service.py - SQLite FTS5 兼容检索层
 
 **职责**:
-- 封装 seekdb 数据库操作
+- 封装 SQLite 文档存储与 FTS5 检索（seekdb 兼容接口）
 - 实现混合检索（向量检索 + 全文检索）
 - 管理文档的增删改查
 
@@ -84,9 +84,9 @@ SmartKnowledgeHub/
 - `get_statistics()` - 获取统计信息
 
 **技术实现**:
-- 使用 SQLAlchemy 进行数据库操作
-- 使用 MySQL 全文索引实现文本检索
-- 预留向量检索接口（需根据 seekdb 实际 API 调整）
+- 使用 Python 标准库 sqlite3 进行数据库操作
+- 使用 SQLite FTS5 实现文本检索
+- 向量检索为预留字段，`vector_score` 恒为 0
 
 ### 4. services/powercontext_service.py - PowerContext 服务
 

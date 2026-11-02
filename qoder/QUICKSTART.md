@@ -16,15 +16,10 @@ pip install -r requirements.txt
 创建 `.env` 文件（或复制 `.env.example`）：
 
 ```env
-# seekdb 数据库配置
-SEEKDB_HOST=localhost
-SEEKDB_PORT=3306
-SEEKDB_USER=root
-SEEKDB_PASSWORD=your_password
-SEEKDB_DATABASE=knowledge_hub
-
-# PowerContext 配置
-POWERCONTEXT_API_KEY=your_api_key_here
+# 检索层：本地 SQLite FTS5（兼容检索层），无需连接 seekdb 服务
+# 上下文层：真实 PowerContext Server（默认 remote，不可达启动即报错）
+POWERCONTEXT_MODE=remote
+POWERCONTEXT_BASE_URL=http://127.0.0.1:8000
 ```
 
 ### 步骤 3: 初始化数据库
@@ -64,7 +59,7 @@ python app.py
 5. 观察语义检索效果
 
 **技术展示**:
-- ✅ seekdb 全文检索
+- ✅ SQLite FTS5 兼容检索层全文检索（未连接 seekdb 服务）
 - ✅ 结果相关性评分
 - ✅ PowerContext 记录搜索历史
 
@@ -83,7 +78,7 @@ python app.py
 
 **技术展示**:
 - ✅ PowerContext 保存学习进度
-- ✅ seekdb 查询相关文档
+- ✅ SQLite FTS5 兼容检索层查询相关文档
 - ✅ 自动记录浏览时长
 
 ---
@@ -101,7 +96,7 @@ python app.py
 
 **技术展示**:
 - ✅ PowerContext 存储用户偏好
-- ✅ 整合 seekdb + PowerContext 数据
+- ✅ 整合 SQLite FTS5 兼容检索层 + 真实 PowerContext 服务
 - ✅ 智能推荐算法
 
 ---
@@ -215,7 +210,7 @@ curl "http://localhost:5000/api/dashboard/test_user"
 
 ### 场景 2: 技术验证
 
-#### 验证 seekdb 混合检索
+#### 验证 SQLite FTS5 兼容检索层
 
 ```bash
 # 测试全文检索
