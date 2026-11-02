@@ -25,9 +25,9 @@ dify/
 ├── dsl/                 # Dify 应用 DSL（.difypkg 与单文件 .yml 两种形态）
 ├── docs/                # 运行说明、验证样例、依赖材料、设计说明
 ├── data/                # 知识库原始数据（恶作剧图鉴）
-├── scripts/             # 初始化 / 预置 / 重置 / 验证 / 一键跑样例
+├── scripts/             # 初始化 / 预置 / 重置 / 验证 / 一键跑样例 / 本地试玩入口
 ├── backend/             # 自研辅助源码（本地代码沙箱、Chatflow 生成器）
-└── evidence/            # 三轮验证的 SSE 原始日志与 seekdb / PowerContext 落库证明
+└── evidence/            # 验证 SSE 原始日志、通缉令演示、seekdb / PowerContext 落库证明、试玩录屏
 ```
 
 ## 快速开始
@@ -36,7 +36,8 @@ dify/
 2. 导入 `dsl/grudge-tavern.difypkg`，按说明配置模型凭据与 Dataset ID。
 3. 运行 `scripts/init_knowledge.py` 创建知识库并完成索引，把打印出的 Dataset ID 填回 Chatflow。
 4. 发布应用，运行 `scripts/run_sample.py` 连打三轮，观察怒气与旧账变化。
-5. 对照 [docs/02-verification.md](docs/02-verification.md) 与 `evidence/` 复核。
+5. 想直接玩：设置 `DIFY_APP_API_KEY` 后运行 `scripts/demo_server.py`，打开 `http://127.0.0.1:8195`。
+6. 对照 [docs/02-verification.md](docs/02-verification.md) 与 `evidence/` 复核；`evidence/demo.mp4` 是试玩页面的连续录屏。
 
 ## 已验证环境
 

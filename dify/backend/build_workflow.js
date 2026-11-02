@@ -74,40 +74,96 @@ const codeParseLlm = `import json
 import re
 
 def main(raw: str, player: str, action: str, grudge_total: int, knowledge: object) -> dict:
-    text = raw or ""
+    text = (raw or "").strip()
     data = None
     for candidate in re.findall(r"\\{.*\\}", text, re.S):
         try:
-            data = json.loads(candidate)
-            break
+            obj = json.loads(candidate)
+            if isinstance(obj, dict):
+                data = obj
+                break
         except Exception:
             continue
+
+    def unquote(s):
+        return (s or "").strip().strip('"').strip("'").strip("“”‘’").strip()
+
     reply = ""
-    verdict = "记仇"
-    delta = 2
+    verdict = ""
+    delta = None
     memory = ""
+
     if isinstance(data, dict):
-        reply = str(data.get("reply") or "").strip()
-        verdict = str(data.get("verdict") or "记仇").strip()
+        reply = unquote(str(data.get("reply") or ""))
+        verdict = unquote(str(data.get("verdict") or ""))
+        memory = unquote(str(data.get("memory") or ""))
         try:
-            delta = int(data.get("grudge_delta", 2))
+            delta = int(data.get("grudge_delta"))
         except Exception:
-            delta = 2
-        memory = str(data.get("memory") or "").strip()
+            delta = None
+
+    # 模型偶尔不按 JSON 返回，退化为解析 "verdict: ... grudge_delta: ... memory: ..."
+    if not verdict:
+        m = re.search(r"verdict['\\\"]?\\s*[:：]\\s*['\\\"]?([^'\\\",，。}\\s]+)", text)
+        if m:
+            verdict = m.group(1)
+    if delta is None:
+        m = re.search(r"grudge_delta['\\\"]?\\s*[:：]\\s*(\\d+)", text)
+        if m:
+            delta = int(m.group(1))
+    if not memory:
+        m = re.search(r"memory['\\\"]?\\s*[:：]\\s*['\\\"](.+?)['\\\"]\\s*[,}]?$", text, re.S)
+        if not m:
+            m = re.search(r"memory['\\\"]?\\s*[:：]\\s*(.+)$", text, re.S)
+        if m:
+            memory = m.group(1)
     if not reply:
-        reply = re.sub(r"\\{.*\\}", "", text, flags=re.S).strip() or "老周没说话，只是把抹布拧得更紧了。"
-    delta = max(0, min(5, delta))
+        m = re.search(r"reply['\\\"]?\\s*[:：]\\s*['\\\"](.+?)['\\\"]", text, re.S)
+        if m:
+            reply = m.group(1)
+    if not verdict:
+        m = re.search(r"(记仇|暴怒|和解|无感)\\s*[|｜]?\\s*(记仇|暴怒|和解|无感)?", text)
+        if m:
+            verdict = m.group(2) or m.group(1)
+    if not reply:
+        marks = [m.start() for m in re.finditer(r"(verdict|grudge_delta|memory)\\s*['\\\"]?\\s*[:：]", text)]
+        head = text[:min(marks)] if marks else text
+        head = re.split(r"(记仇|暴怒|和解|无感)\\s*[|｜]", head)[0]
+        head = re.sub(r"^(老周的)?台词\\s*[:：]\\s*", "", head)
+        reply = unquote(head)
+
+    # 清理字段泄漏与引号
+    reply = re.split(r"\\s*(?:verdict|grudge_delta|memory)\\s*['\\\"]?\\s*[:：]", reply)[0]
+    reply = re.sub(r"^(老周的)?台词\\s*[:：]\\s*", "", reply)
+    reply = unquote(reply)
+    if not reply:
+        reply = "老周没说话，只是把抹布拧得更紧了。"
+
+    if not verdict:
+        verdict = "记仇"
+    if delta is None:
+        m = re.search(r"怒气\\s*[+＋]\\s*(\\d+)", memory or text)
+        delta = int(m.group(1)) if m else 2
+    delta = max(0, min(5, int(delta)))
 
     def clean(s, limit):
         s = (s or "").replace('"', "'").replace("\\\\", "／").replace("\\n", " ").replace("\\r", " ").strip()
         return s[:limit]
 
-    reply = clean(reply, 160)
-    verdict = clean(verdict, 12)
+    memory = re.split(r"\\s*(?:verdict|grudge_delta)\\s*['\\\"]?\\s*[:：]", memory)[0]
+    memory = re.sub(r"^memory\\s*['\\\"]?\\s*[:：]\\s*", "", memory)
+    memory = unquote(memory)
     if not memory:
         memory = "玩家【" + player + "】对老周做了：" + action + "。老周的反应：" + reply + "。怒气+" + str(delta) + "。"
-    if "怒气" not in memory:
-        memory = memory + "（怒气 +" + str(delta) + "）"
+    else:
+        # 以结构化 grudge_delta 为准，避免旧账里的怒气值与面板不一致
+        if re.search(r"怒气\\s*[+＋]\\s*\\d+", memory):
+            memory = re.sub(r"怒气\\s*[+＋]\\s*\\d+", "怒气 +" + str(delta), memory)
+        else:
+            memory = memory.rstrip("。") + "（怒气 +" + str(delta) + "）"
+
+    reply = clean(reply, 160)
+    verdict = clean(verdict, 12)
     memory = clean(memory, 700)
     titles = []
     seen_titles = set()

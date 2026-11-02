@@ -168,3 +168,41 @@ curl -s -X POST http://127.0.0.1:8000/v1/memory/entries/retire \
 ```
 
 原始 SSE 在 `evidence/logs-run/session{1,2,3}.sse`。`--strict` 会校验「旧账条数」和「历史怒气」严格递增，任一项不满足即返回非零退出码，可用于回归。
+
+## 9. 怒气四档与通缉令验证（2026-11-02 23:53 CST）
+
+为覆盖「装没事 → 冷脸 → 擀面杖 → 通缉令」全部四档，另起新玩家 `通缉演示三` 连打 7 轮（每轮仍不带 `conversation_id`）：
+
+```bash
+python scripts/run_sample.py --player 通缉演示三 --rounds 7 --strict \
+  --save-dir evidence/logs-wanted \
+  --queries "趁老周转身，往他的啤酒里加大半瓶辣椒水|把一只假蟑螂塞进老周的杯垫底下|偷偷把老周的招牌酒换成兑水的假酒|把老周的招牌菜端去喂门口的黄狗|趁打烊前把老周常坐的藤椅锯短两厘米|把糖罐和盐罐对调，让整晚的甜酒都变咸|撕掉老周记账本的三页纸"
+```
+
+| 轮次 | conversation_id | 召回 | 历史怒气 | 增量 | 总怒气 | 老周状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `f3bc517b-bf87-4623-928a-943ac6ae0c7c` | 0 | 0 | +3 | 3 | 装没事 |
+| 2 | `9dd8a1ce-52c3-416b-8563-babcc7a40153` | 1 | 3 | +3 | 6 | 冷脸 |
+| 3 | `f9b4dece-0540-46aa-b5cd-7d2ecdb17e6d` | 2 | 6 | +5 | 11 | 擀面杖 |
+| 4 | `ab7c8dfa-20a0-4938-af56-b62229e7de22` | 3 | 11 | +4 | 15 | 通缉令 |
+| 5 | `8166d031-ea9b-4218-a597-fc93ffc93155` | 4 | 15 | +5 | 20 | 通缉令 |
+| 6 | `8a75e116-a13c-4cec-b631-7c4a4ddc83ba` | 5 | 20 | +3 | 23 | 通缉令 |
+| 7 | `a78acffe-9519-46db-bed1-b6812a3ff391` | 6 | 23 | +5 | 28 | 通缉令 |
+
+- 输出：`[ OK ] 跨会话记忆与怒气累计均递增`，退出码 0。
+- 第 4 轮总怒气跨过 15，`parse_llm.threat` 首次输出 `通缉令`，回答中老周明确提到上一轮的「招牌菜喂黄狗」。
+- 原始 SSE：`evidence/logs-wanted/session1.sse` … `session7.sse`（工作流状态均为 `succeeded`）。
+- 该表同时证明一件事：记忆正文统一带 `怒气 +N` 后，`parse_recall` 的累计值与面板值逐轮一致，不再出现旧版「怒气上升」无数字导致累计回退的问题。
+
+## 10. 本地试玩入口与录屏
+
+仓库内提供零依赖试玩入口 `scripts/demo_server.py`：浏览器页面把输入转发到 Dify Service API，并把 `parse_scope / parse_recall / parse_llm` 的结果展示为怒气条、旧账和 threat 状态。
+
+```bash
+export DIFY_BASE_URL=http://127.0.0.1:5001
+export DIFY_APP_API_KEY=app-xxxxx
+python scripts/demo_server.py
+# 打开 http://127.0.0.1:8195
+```
+
+`evidence/demo.mp4` 是用 Edge 实际打开该页面、以新玩家 `演示阿福二` 连打 7 轮的录屏（2026-11-02 23:57 CST），画面中怒气条依次为 3 → 6 → 9 → 12 → 17 → 20 → 25，`翻出旧账` 从 0 增至 6，并在第 5 轮切换为「通缉令」。录屏不是剪辑拼接，而是 Playwright 对真实页面的连续录制。

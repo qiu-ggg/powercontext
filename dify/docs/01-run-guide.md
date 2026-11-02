@@ -175,6 +175,20 @@ python scripts/run_sample.py --player 铁柱 --rounds 3
 4. 因为 Windows 上 Dify 官方代码沙箱依赖 Linux/Docker，改为运行 `backend/sandbox_server.py`（仅执行代码节点的 Python，接口与 Dify 沙箱协议一致）。
 5. 插件守护进程需要两处 Windows 兼容补丁（`.venv/Scripts/python.exe` 路径、安装目录 `:` 非法文件名与 UTF-8 子进程环境），见 `docs/03-dependencies.md` §6。
 
+### 4.9 本地试玩入口（可选，但推荐演示）
+
+`scripts/demo_server.py` 是一个零依赖（仅标准库）的本地网页，把输入转发到已发布的 Dify 应用，并显示怒气条、旧账与状态：
+
+```bash
+export DIFY_BASE_URL=http://127.0.0.1:5001
+export DIFY_APP_API_KEY=app-xxxxx
+export DEMO_PORT=8195
+python scripts/demo_server.py
+# 浏览器打开 http://127.0.0.1:8195，输入玩家名后即可开始
+```
+
+它不改变工作流，只是把 Service API 的结果可视化；用于本地演示与录屏，判题时也可以直接通过它体验完整玩法。仓库中的 `evidence/demo.mp4` 就是该页面的连续录屏。
+
 ## 5. 外部服务、依赖与限额
 
 | 依赖 | 是否必需 | 默认地址 | 限额 / 注意事项 |

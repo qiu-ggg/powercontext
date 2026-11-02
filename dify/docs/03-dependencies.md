@@ -113,6 +113,8 @@ python scripts/init_knowledge.py --file data/prank_compendium.md --name 记仇�
 | `scripts/seed_powercontext.py --player 铁柱 --preset heavy` | 幂等创建玩家 scope，并预置若干条旧账（用于演示"老玩家一进门就被翻旧账"） |
 | `scripts/reset_demo.py --player 铁柱` | 列出该玩家所有记忆条目并逐条 `/v1/memory/entries/retire` 退役（保留历史版本） |
 | `scripts/verify_stack.py --dump player=铁柱` | 打印 scope 与全部记忆条目，核对召回数据 |
+| `scripts/run_sample.py --player 铁柱 --rounds 3 --strict` | 通过 Service API 连打多轮，校验旧账条数与怒气严格递增 |
+| `scripts/demo_server.py` | 零依赖本地试玩页面（`http://127.0.0.1:8195`），把 Service API 结果可视化为怒气条与旧账 |
 
 预置数据结构（`/v1/memory/remember`）：
 

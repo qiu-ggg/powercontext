@@ -494,26 +494,50 @@ workflow:
       type: custom
     - data:
         code: "import json\nimport re\n\ndef main(raw: str, player: str, action: str,\
-          \ grudge_total: int, knowledge: object) -> dict:\n    text = raw or \"\"\
-          \n    data = None\n    for candidate in re.findall(r\"\\{.*\\}\", text,\
-          \ re.S):\n        try:\n            data = json.loads(candidate)\n     \
-          \       break\n        except Exception:\n            continue\n    reply\
-          \ = \"\"\n    verdict = \"记仇\"\n    delta = 2\n    memory = \"\"\n    if\
-          \ isinstance(data, dict):\n        reply = str(data.get(\"reply\") or \"\
-          \").strip()\n        verdict = str(data.get(\"verdict\") or \"记仇\").strip()\n\
-          \        try:\n            delta = int(data.get(\"grudge_delta\", 2))\n\
-          \        except Exception:\n            delta = 2\n        memory = str(data.get(\"\
-          memory\") or \"\").strip()\n    if not reply:\n        reply = re.sub(r\"\
-          \\{.*\\}\", \"\", text, flags=re.S).strip() or \"老周没说话，只是把抹布拧得更紧了。\"\n \
-          \   delta = max(0, min(5, delta))\n\n    def clean(s, limit):\n        s\
-          \ = (s or \"\").replace('\"', \"'\").replace(\"\\\\\", \"／\").replace(\"\
-          \\n\", \" \").replace(\"\\r\", \" \").strip()\n        return s[:limit]\n\
-          \n    reply = clean(reply, 160)\n    verdict = clean(verdict, 12)\n    if\
-          \ not memory:\n        memory = \"玩家【\" + player + \"】对老周做了：\" + action\
-          \ + \"。老周的反应：\" + reply + \"。怒气+\" + str(delta) + \"。\"\n    if \"怒气\" not\
-          \ in memory:\n        memory = memory + \"（怒气 +\" + str(delta) + \"）\"\n\
-          \    memory = clean(memory, 700)\n    titles = []\n    seen_titles = set()\n\
-          \    if isinstance(knowledge, list):\n        for item in knowledge[:3]:\n\
+          \ grudge_total: int, knowledge: object) -> dict:\n    text = (raw or \"\"\
+          ).strip()\n    data = None\n    for candidate in re.findall(r\"\\{.*\\}\"\
+          , text, re.S):\n        try:\n            obj = json.loads(candidate)\n\
+          \            if isinstance(obj, dict):\n                data = obj\n   \
+          \             break\n        except Exception:\n            continue\n\n\
+          \    def unquote(s):\n        return (s or \"\").strip().strip('\"').strip(\"\
+          '\").strip(\"“”‘’\").strip()\n\n    reply = \"\"\n    verdict = \"\"\n \
+          \   delta = None\n    memory = \"\"\n\n    if isinstance(data, dict):\n\
+          \        reply = unquote(str(data.get(\"reply\") or \"\"))\n        verdict\
+          \ = unquote(str(data.get(\"verdict\") or \"\"))\n        memory = unquote(str(data.get(\"\
+          memory\") or \"\"))\n        try:\n            delta = int(data.get(\"grudge_delta\"\
+          ))\n        except Exception:\n            delta = None\n\n    # 模型偶尔不按\
+          \ JSON 返回，退化为解析 \"verdict: ... grudge_delta: ... memory: ...\"\n    if not\
+          \ verdict:\n        m = re.search(r\"verdict\\s*[:：]\\s*([^\\s|｜,，。]+)\"\
+          , text)\n        if m:\n            verdict = m.group(1)\n    if delta is\
+          \ None:\n        m = re.search(r\"grudge_delta\\s*[:：]\\s*(\\d+)\", text)\n\
+          \        if m:\n            delta = int(m.group(1))\n    if not memory:\n\
+          \        m = re.search(r\"memory\\s*[:：]\\s*(.+)$\", text, re.S)\n     \
+          \   if m:\n            memory = m.group(1)\n    if not verdict:\n      \
+          \  m = re.search(r\"(记仇|暴怒|和解|无感)\\s*[|｜]?\\s*(记仇|暴怒|和解|无感)?\", text)\n\
+          \        if m:\n            verdict = m.group(2) or m.group(1)\n    if not\
+          \ reply:\n        marks = [m.start() for m in re.finditer(r\"(verdict|grudge_delta|memory)\\\
+          s*[:：]\", text)]\n        head = text[:min(marks)] if marks else text\n\
+          \        head = re.split(r\"(记仇|暴怒|和解|无感)\\s*[|｜]\", head)[0]\n        head\
+          \ = re.sub(r\"^(老周的)?台词\\s*[:：]\\s*\", \"\", head)\n        reply = unquote(head)\n\
+          \n    # 清理字段泄漏与引号\n    reply = re.split(r\"\\s*(?:verdict|grudge_delta|memory)\\\
+          s*[:：]\", reply)[0]\n    reply = re.sub(r\"^(老周的)?台词\\s*[:：]\\s*\", \"\"\
+          , reply)\n    reply = unquote(reply)\n    if not reply:\n        reply =\
+          \ \"老周没说话，只是把抹布拧得更紧了。\"\n\n    if not verdict:\n        verdict = \"记仇\"\
+          \n    if delta is None:\n        m = re.search(r\"怒气\\s*[+＋]\\s*(\\d+)\"\
+          , memory or text)\n        delta = int(m.group(1)) if m else 2\n    delta\
+          \ = max(0, min(5, int(delta)))\n\n    def clean(s, limit):\n        s =\
+          \ (s or \"\").replace('\"', \"'\").replace(\"\\\\\", \"／\").replace(\"\\\
+          n\", \" \").replace(\"\\r\", \" \").strip()\n        return s[:limit]\n\n\
+          \    memory = re.split(r\"\\s*(?:verdict|grudge_delta)\\s*[:：]\", memory)[0]\n\
+          \    memory = re.sub(r\"^memory\\s*[:：]\\s*\", \"\", memory)\n    memory\
+          \ = unquote(memory)\n    if not memory:\n        memory = \"玩家【\" + player\
+          \ + \"】对老周做了：\" + action + \"。老周的反应：\" + reply + \"。怒气+\" + str(delta) +\
+          \ \"。\"\n    else:\n        # 以结构化 grudge_delta 为准，避免旧账里的怒气值与面板不一致\n   \
+          \     memory = re.sub(r\"怒气\\s*[+＋]\\s*\\d+\", \"怒气 +\" + str(delta), memory)\n\
+          \        if \"怒气\" not in memory:\n            memory = memory + \"（怒气 +\"\
+          \ + str(delta) + \"）\"\n\n    reply = clean(reply, 160)\n    verdict = clean(verdict,\
+          \ 12)\n    memory = clean(memory, 700)\n    titles = []\n    seen_titles\
+          \ = set()\n    if isinstance(knowledge, list):\n        for item in knowledge[:3]:\n\
           \            if isinstance(item, dict):\n                meta = item.get(\"\
           metadata\") or {}\n                title = meta.get(\"title\") or item.get(\"\
           title\")\n                if title and str(title) not in seen_titles:\n\
