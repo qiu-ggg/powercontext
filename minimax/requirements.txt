@@ -1,0 +1,9 @@
+# Runtime + test dependencies of the context module and the sample project.
+# Python >= 3.11 (tested on 3.12).
+#
+# PowerContext is a separate service, not an import of this module:
+#   pip install "powercontext[server,builtin,code,cli]==1.4.1"
+# See docs/RUN.md section 2.3.
+
+pymysql>=1.1,<2
+pytest>=8,<10
