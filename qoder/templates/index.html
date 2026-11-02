@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能知识库 - Smart Knowledge Hub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <a href="/">&#x1f4da; 智能知识库</a>
+            </div>
+            <div class="navbar-menu">
+                <a href="/" class="active">首页</a>
+                <a href="/search">检索</a>
+                <a href="/dashboard">仪表盘</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="container">
+            <h1>智能知识库管理系统</h1>
+            <p class="subtitle">基于 seekdb + PowerContext 的智能学习与科研助手</p>
+
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="搜索论文、笔记、资料..." />
+                <button onclick="performSearch()">&#x1f50d; 搜索</button>
+            </div>
+
+            <div class="quick-stats">
+                <div class="stat-card">
+                    <div class="stat-icon">&#x1f4c4;</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="totalDocs">-</div>
+                        <div class="stat-label">文档总数</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">&#x1f50d;</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="totalSearches">-</div>
+                        <div class="stat-label">搜索次数</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">&#x23f1;&#xfe0f;</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="studyTime">-</div>
+                        <div class="stat-label">学习时长</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="container">
+            <h2>核心功能</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f4dd;</div>
+                    <h3>文献管理</h3>
+                    <p>上传和管理论文、笔记、学习资料，支持多种格式</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f50d;</div>
+                    <h3>智能检索</h3>
+                    <p>基于 seekdb 的 FTS5 全文检索，快速找到相关内容</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f9e0;</div>
+                    <h3>学习追踪</h3>
+                    <p>PowerContext 记录学习进度，提供个性化推荐</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f4ca;</div>
+                    <h3>数据分析</h3>
+                    <p>可视化学习统计，了解学习习惯和偏好</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="tech-stack">
+        <div class="container">
+            <h2>技术架构</h2>
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <h4>后端框架</h4>
+                    <p>Python Flask</p>
+                </div>
+                <div class="tech-item highlight">
+                    <h4>数据检索</h4>
+                    <p>seekdb (SQLite + FTS5)</p>
+                </div>
+                <div class="tech-item highlight">
+                    <h4>上下文服务</h4>
+                    <p>PowerContext (本地)</p>
+                </div>
+                <div class="tech-item">
+                    <h4>前端</h4>
+                    <p>HTML + CSS + JavaScript</p>
+                </div>
+            </div>
+            <div class="tech-desc">
+                <div class="tech-desc-item">
+                    <h4>seekdb 的作用</h4>
+                    <p>提供混合检索能力：FTS5 全文索引实现关键词匹配，结构化查询支持分类和时间过滤。所有文档存储和搜索均通过 seekdb 完成。</p>
+                </div>
+                <div class="tech-desc-item">
+                    <h4>PowerContext 的作用</h4>
+                    <p>管理用户上下文记忆：Scope 隔离的用户空间、Atomic Memory 原子记忆（学习进度、搜索历史、偏好设置），支持记忆搜索和上下文召回。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="demo-section">
+        <div class="container">
+            <h2>快速体验</h2>
+            <div class="demo-grid">
+                <div class="demo-card" onclick="window.location='/search?q=深度学习'">
+                    <h4>&#x1f50d; 搜索「深度学习」</h4>
+                    <p>体验 seekdb 全文检索能力</p>
+                </div>
+                <div class="demo-card" onclick="window.location='/document/1'">
+                    <h4>&#x1f4d6; 查看第一篇文档</h4>
+                    <p>体验学习进度追踪</p>
+                </div>
+                <div class="demo-card" onclick="window.location='/dashboard'">
+                    <h4>&#x1f4ca; 打开仪表盘</h4>
+                    <p>查看 PowerContext 记忆数据</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>智能知识库 - Smart Knowledge Hub | 基于 Qoder 开发</p>
+            <p class="tech-used">
+                技术栈:
+                <a href="https://github.com/oceanbase/powercontext" target="_blank">PowerContext</a> |
+                seekdb (SQLite + FTS5)
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/statistics');
+                const stats = await response.json();
+                document.getElementById('totalDocs').textContent = stats.total_documents || 0;
+
+                const userId = 'demo_user';
+                const analyticsResponse = await fetch('/api/analytics/' + userId);
+                const analytics = await analyticsResponse.json();
+                document.getElementById('totalSearches').textContent = analytics.total_searches || 0;
+
+                const studyTimeHours = Math.floor((analytics.total_study_time || 0) / 3600);
+                const studyTimeMin = Math.floor(((analytics.total_study_time || 0) % 3600) / 60);
+                document.getElementById('studyTime').textContent = studyTimeHours > 0 ? studyTimeHours + 'h' : studyTimeMin + 'm';
+            } catch (error) {
+                console.error('加载统计数据失败:', error);
+            }
+        }
+
+        function performSearch() {
+            const query = document.getElementById('searchInput').value;
+            if (query.trim()) {
+                window.location.href = '/search?q=' + encodeURIComponent(query);
+            }
+        }
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        window.addEventListener('load', loadStats);
+    </script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>搜索 - 智能知识库</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <a href="/">&#x1f4da; 智能知识库</a>
+            </div>
+            <div class="navbar-menu">
+                <a href="/">首页</a>
+                <a href="/search" class="active">检索</a>
+                <a href="/dashboard">仪表盘</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="search-section">
+        <div class="container">
+            <h2>智能检索</h2>
+
+            <div class="search-container">
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="输入关键词或描述..."
+                    value="{{ request.args.get('q', '') }}"
+                />
+                <select id="categoryFilter">
+                    <option value="">全部分类</option>
+                    {% for category in categories %}
+                    <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                </select>
+                <button onclick="performSearch()">&#x1f50d; 搜索</button>
+            </div>
+
+            <div class="search-options">
+                <span class="search-tip">
+                    &#x1f4a1; seekdb FTS5 全文检索引擎，支持中文分词匹配
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <section class="results-section">
+        <div class="container">
+            <div id="searchStatus" class="search-status"></div>
+            <div id="searchResults" class="results-list"></div>
+
+            <div id="memorySearch" class="memory-search" style="display:none; margin-top: 30px;">
+                <h3>&#x1f9e0; PowerContext 记忆搜索</h3>
+                <div id="memoryResults" class="memory-results"></div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>智能知识库 - Smart Knowledge Hub</p>
+        </div>
+    </footer>
+
+    <script>
+        const userId = 'demo_user';
+
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value;
+            const category = document.getElementById('categoryFilter').value;
+
+            if (!query.trim()) {
+                alert('请输入搜索关键词');
+                return;
+            }
+
+            const url = new URL(window.location);
+            url.searchParams.set('q', query);
+            if (category) url.searchParams.set('category', category);
+            window.history.pushState({}, '', url);
+
+            document.getElementById('searchStatus').innerHTML = '<div class="loading">正在搜索...</div>';
+            document.getElementById('searchResults').innerHTML = '';
+            document.getElementById('memorySearch').style.display = 'none';
+
+            try {
+                const params = new URLSearchParams({ q: query, user_id: userId, limit: '20' });
+                if (category) params.append('category', category);
+
+                const response = await fetch('/api/search?' + params);
+                const data = await response.json();
+
+                if (data.error) {
+                    document.getElementById('searchStatus').innerHTML =
+                        '<div class="error">错误: ' + data.error + '</div>';
+                    return;
+                }
+
+                document.getElementById('searchStatus').innerHTML =
+                    '<div class="result-count">找到 ' + data.count + ' 个结果 (seekdb FTS5 检索)</div>';
+
+                displayResults(data.results);
+                searchMemory(query);
+
+            } catch (error) {
+                document.getElementById('searchStatus').innerHTML =
+                    '<div class="error">搜索失败: ' + error.message + '</div>';
+            }
+        }
+
+        function displayResults(results) {
+            const container = document.getElementById('searchResults');
+
+            if (results.length === 0) {
+                container.innerHTML = '<div class="no-results">没有找到相关结果</div>';
+                return;
+            }
+
+            const maxScore = Math.max(...results.map(r => r.final_score || 0.01));
+
+            const html = results.map(result => {
+                const normalizedScore = maxScore > 0 ? ((result.final_score || 0) / maxScore * 100) : 0;
+                return '<div class="result-card">' +
+                    '<div class="result-header">' +
+                        '<h3><a href="/document/' + result.document_id + '">' + escapeHtml(result.title) + '</a></h3>' +
+                        '<span class="result-category">' + escapeHtml(result.category || '未分类') + '</span>' +
+                    '</div>' +
+                    '<div class="result-preview">' + escapeHtml(result.content.substring(0, 200)) + '...</div>' +
+                    '<div class="result-footer">' +
+                        '<div class="result-tags">' +
+                            (result.tags || '').split(',').map(function(tag) {
+                                return '<span class="tag">' + escapeHtml(tag.trim()) + '</span>';
+                            }).join('') +
+                        '</div>' +
+                        '<div class="result-score">相关度: ' + normalizedScore.toFixed(1) + '%</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        async function searchMemory(query) {
+            try {
+                const response = await fetch('/api/memory/search/' + userId + '?q=' + encodeURIComponent(query));
+                const data = await response.json();
+
+                if (data.count > 0) {
+                    document.getElementById('memorySearch').style.display = 'block';
+                    const html = '<p class="memory-hint">PowerContext 中找到 ' + data.count + ' 条相关记忆</p>' +
+                        data.results.map(function(r) {
+                            return '<div class="memory-item">' +
+                                '<span class="memory-kind">' + escapeHtml(r.kind) + '</span> ' +
+                                '<span class="memory-id">' + escapeHtml(r.artifact_id) + '</span>' +
+                                '<div class="memory-text">' + escapeHtml(typeof r.content === 'string' ? r.content.substring(0, 100) : JSON.stringify(r.content).substring(0, 100)) + '</div>' +
+                            '</div>';
+                        }).join('');
+                    document.getElementById('memoryResults').innerHTML = html;
+                }
+            } catch (e) {
+                console.log('记忆搜索跳过:', e);
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
+        }
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        window.addEventListener('load', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('q')) performSearch();
+        });
+    </script>
+</body>
+</html>

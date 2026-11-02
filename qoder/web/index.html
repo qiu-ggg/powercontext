@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能知识库 - Smart Knowledge Hub</title>
+    <meta name="description" content="基于 seekdb + PowerContext 的智能学习与科研助手，由 Qoder 开发">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5a67d8;
+            --secondary: #764ba2;
+            --text: #2c3e50;
+            --text-light: #7f8c8d;
+            --bg: #f5f7fa;
+            --white: #ffffff;
+            --border: #e0e0e0;
+            --success: #27ae60;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 40px rgba(0,0,0,0.15);
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--bg);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Navigation */
+        nav {
+            background: var(--white);
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        nav .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 70px;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--text);
+            text-decoration: none;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            list-style: none;
+        }
+        
+        .nav-links a {
+            color: var(--text-light);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+        
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: var(--white);
+            padding: 100px 0 80px;
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        
+        .hero .subtitle {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            margin-bottom: 15px;
+        }
+        
+        .hero .description {
+            font-size: 1.1rem;
+            opacity: 0.85;
+            max-width: 700px;
+            margin: 0 auto 40px;
+        }
+        
+        .hero-badges {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+        
+        .badge {
+            background: rgba(255,255,255,0.2);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+        }
+        
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 15px 35px;
+            border-radius: 30px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: var(--white);
+            color: var(--primary);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: var(--white);
+            border: 2px solid var(--white);
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        /* Section Styles */
+        section {
+            padding: 80px 0;
+        }
+        
+        section h2 {
+            text-align: center;
+            font-size: 2.2rem;
+            margin-bottom: 15px;
+            color: var(--text);
+        }
+        
+        .section-subtitle {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 1.1rem;
+            margin-bottom: 50px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        /* Problem Section */
+        .problem-section {
+            background: var(--white);
+        }
+        
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+        
+        .problem-card {
+            padding: 30px;
+            background: var(--bg);
+            border-radius: 15px;
+            text-align: center;
+        }
+        
+        .problem-card .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .problem-card h3 {
+            color: var(--text);
+            margin-bottom: 10px;
+        }
+        
+        .problem-card p {
+            color: var(--text-light);
+        }
+        
+        /* Features Section */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+        
+        .feature-card {
+            background: var(--white);
+            padding: 35px;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .feature-card .icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+        
+        .feature-card h3 {
+            color: var(--text);
+            margin-bottom: 10px;
+            font-size: 1.3rem;
+        }
+        
+        .feature-card p {
+            color: var(--text-light);
+            line-height: 1.7;
+        }
+        
+        /* Tech Stack Section */
+        .tech-section {
+            background: var(--white);
+        }
+        
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 50px;
+        }
+        
+        .tech-card {
+            padding: 25px;
+            background: var(--bg);
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+        }
+        
+        .tech-card.highlight {
+            border-color: var(--primary);
+            background: linear-gradient(135deg, rgba(102,126,234,0.05), rgba(118,75,162,0.05));
+        }
+        
+        .tech-card h4 {
+            color: var(--text-light);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        
+        .tech-card p {
+            color: var(--text);
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        
+        .tech-detail {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 40px;
+        }
+        
+        .tech-detail-card {
+            padding: 30px;
+            background: var(--bg);
+            border-radius: 15px;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .tech-detail-card h3 {
+            color: var(--text);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .tech-detail-card p {
+            color: var(--text-light);
+            line-height: 1.8;
+        }
+        
+        .tech-detail-card code {
+            background: var(--white);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--primary-dark);
+        }
+        
+        /* Architecture Section */
+        .architecture-section {
+            background: var(--bg);
+        }
+        
+        .arch-diagram {
+            background: var(--white);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .arch-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 30px 0;
+        }
+        
+        .arch-box {
+            padding: 20px 30px;
+            border-radius: 10px;
+            text-align: center;
+            min-width: 150px;
+        }
+        
+        .arch-box.frontend {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .arch-box.backend {
+            background: var(--bg);
+            border: 2px solid var(--primary);
+            color: var(--text);
+        }
+        
+        .arch-box.database {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .arch-box.memory {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .arch-box h4 {
+            margin-bottom: 5px;
+        }
+        
+        .arch-box p {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+        
+        .arch-arrow {
+            font-size: 1.5rem;
+            color: var(--text-light);
+        }
+        
+        /* Demo Section */
+        .demo-section {
+            background: var(--white);
+        }
+        
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+        
+        .demo-card {
+            background: var(--bg);
+            padding: 25px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        
+        .demo-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-3px);
+        }
+        
+        .demo-card h4 {
+            color: var(--text);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .demo-card p {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+        
+        /* Running Section */
+        .running-section {
+            background: var(--bg);
+        }
+        
+        .steps {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .step {
+            background: var(--white);
+            padding: 25px 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        
+        .step-number {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        
+        .step-content h4 {
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        
+        .step-content p {
+            color: var(--text-light);
+        }
+        
+        .step-content code {
+            background: var(--bg);
+            padding: 3px 10px;
+            border-radius: 5px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9rem;
+            color: var(--primary-dark);
+            display: inline-block;
+            margin-top: 5px;
+        }
+        
+        /* Validation Section */
+        .validation-section {
+            background: var(--white);
+        }
+        
+        .validation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .validation-card {
+            background: var(--bg);
+            padding: 30px;
+            border-radius: 15px;
+        }
+        
+        .validation-card h3 {
+            color: var(--text);
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--primary);
+        }
+        
+        .validation-card ol, .validation-card ul {
+            padding-left: 20px;
+            color: var(--text-light);
+        }
+        
+        .validation-card li {
+            margin-bottom: 10px;
+            line-height: 1.7;
+        }
+        
+        .validation-card strong {
+            color: var(--text);
+        }
+        
+        /* Footer */
+        footer {
+            background: var(--text);
+            color: var(--white);
+            padding: 50px 0 30px;
+            text-align: center;
+        }
+        
+        footer h3 {
+            margin-bottom: 15px;
+        }
+        
+        footer p {
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+        
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .copyright {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.9rem;
+            opacity: 0.6;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2rem; }
+            .hero .subtitle { font-size: 1.1rem; }
+            section { padding: 50px 0; }
+            section h2 { font-size: 1.8rem; }
+            .tech-detail { grid-template-columns: 1fr; }
+            .arch-flow { flex-direction: column; }
+            .arch-arrow { transform: rotate(90deg); }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="#" class="logo">&#x1f4da; 智能知识库</a>
+            <ul class="nav-links">
+                <li><a href="#problem">痛点</a></li>
+                <li><a href="#features">功能</a></li>
+                <li><a href="#tech">技术</a></li>
+                <li><a href="#demo">体验</a></li>
+                <li><a href="#running">运行</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="container">
+            <h1>智能知识库管理系统</h1>
+            <p class="subtitle">基于 seekdb + PowerContext 的智能学习与科研助手</p>
+            <p class="description">
+                整理文献要翻几十篇论文？复习时找不到上学期的笔记？周报总要从聊天记录里一条条拼？
+                智能知识库帮你解决这些学习和工作中的重复耗时环节。
+            </p>
+            <div class="hero-badges">
+                <span class="badge">&#x1f916; Qoder 开发</span>
+                <span class="badge">&#x1f50d; seekdb 检索</span>
+                <span class="badge">&#x1f9e0; PowerContext 记忆</span>
+                <span class="badge">&#x1f310; Qoder Sites 部署</span>
+            </div>
+            <div class="cta-buttons">
+                <a href="#demo" class="btn btn-primary">&#x1f680; 在线体验</a>
+                <a href="https://github.com/oceanbase/powercontext" target="_blank" class="btn btn-secondary">&#x1f4bb; 源代码</a>
+            </div>
+        </div>
+    </section>
+
+    <section id="problem" class="problem-section">
+        <div class="container">
+            <h2>解决的问题</h2>
+            <p class="section-subtitle">学习和工作中的真实痛点</p>
+            <div class="problem-grid">
+                <div class="problem-card">
+                    <div class="icon">&#x1f4da;</div>
+                    <h3>文献管理混乱</h3>
+                    <p>几十篇论文的 PDF 散落在各处，想找某段内容要翻半天</p>
+                </div>
+                <div class="problem-card">
+                    <div class="icon">&#x1f50d;</div>
+                    <h3>检索效率低下</h3>
+                    <p>传统关键词搜索找不到相关内容，缺乏语义理解能力</p>
+                </div>
+                <div class="problem-card">
+                    <div class="icon">&#x1f4cb;</div>
+                    <h3>学习进度丢失</h3>
+                    <p>上次读到哪了？学到什么程度了？每次都要重新开始</p>
+                </div>
+                <div class="problem-card">
+                    <div class="icon">&#x1f9e0;</div>
+                    <h3>缺乏个性化</h3>
+                    <p>不知道自己的学习偏好，没有针对性的推荐和提醒</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="features-section">
+        <div class="container">
+            <h2>核心功能</h2>
+            <p class="section-subtitle">四大模块，全面提升学习效率</p>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="icon">&#x1f4dd;</div>
+                    <h3>文献管理</h3>
+                    <p>上传和管理论文、笔记、学习资料，支持分类标签管理，自动提取关键信息</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">&#x1f50d;</div>
+                    <h3>智能检索</h3>
+                    <p>基于 seekdb FTS5 全文检索引擎，支持中文分词匹配，按语义相关性排序</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">&#x1f4ca;</div>
+                    <h3>学习追踪</h3>
+                    <p>PowerContext 自动记录学习进度，下次打开自动恢复，支持多终端同步</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">&#x1f9e0;</div>
+                    <h3>个性化推荐</h3>
+                    <p>基于学习历史和偏好，智能推荐相关内容，越用越懂你</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">&#x1f4c8;</div>
+                    <h3>数据分析</h3>
+                    <p>可视化学习统计：浏览时长、完成度、搜索频率、分类偏好一目了然</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">&#x1f310;</div>
+                    <h3>上下文召回</h3>
+                    <p>PowerContext Recall API 召回用户记忆，跨会话保持工作上下文连续性</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="tech" class="tech-section">
+        <div class="container">
+            <h2>技术架构</h2>
+            <p class="section-subtitle">seekdb + PowerContext 双引擎驱动</p>
+            <div class="tech-grid">
+                <div class="tech-card">
+                    <h4>后端框架</h4>
+                    <p>Python Flask</p>
+                </div>
+                <div class="tech-card highlight">
+                    <h4>数据检索</h4>
+                    <p>seekdb (SQLite + FTS5)</p>
+                </div>
+                <div class="tech-card highlight">
+                    <h4>上下文服务</h4>
+                    <p>PowerContext</p>
+                </div>
+                <div class="tech-card">
+                    <h4>前端技术</h4>
+                    <p>HTML + CSS + JavaScript</p>
+                </div>
+                <div class="tech-card">
+                    <h4>开发工具</h4>
+                    <p>Qoder Desktop</p>
+                </div>
+                <div class="tech-card">
+                    <h4>部署平台</h4>
+                    <p>Qoder Sites</p>
+                </div>
+            </div>
+
+            <div class="tech-detail">
+                <div class="tech-detail-card">
+                    <h3>&#x1f50d; seekdb 的作用</h3>
+                    <p>
+                        seekdb 提供<strong>混合检索</strong>能力：
+                    </p>
+                    <ul style="margin-top: 10px; padding-left: 20px; color: var(--text-light);">
+                        <li><strong>FTS5 全文索引</strong>：关键词匹配，支持中文分词</li>
+                        <li><strong>结构化查询</strong>：按分类、时间等字段过滤</li>
+                        <li><strong>加权排序</strong>：检索结果按相关性评分排序</li>
+                    </ul>
+                    <p style="margin-top: 15px;">
+                        所有文档存储和搜索均通过 seekdb 完成，单次查询响应时间 &lt; 100ms。
+                    </p>
+                </div>
+                <div class="tech-detail-card">
+                    <h3>&#x1f9e0; PowerContext 的作用</h3>
+                    <p>
+                        PowerContext 管理<strong>用户上下文记忆</strong>（兼容 API v1.4 规范）：
+                    </p>
+                    <ul style="margin-top: 10px; padding-left: 20px; color: var(--text-light);">
+                        <li><strong>Scope 隔离</strong>：每个用户独立的记忆空间</li>
+                        <li><strong>Atomic Memory</strong>：原子记忆（进度、历史、偏好）</li>
+                        <li><strong>Search & Recall</strong>：记忆搜索和上下文召回</li>
+                    </ul>
+                    <p style="margin-top: 15px;">
+                        学习进度、搜索历史、偏好设置均保存在 PowerContext，跨会话持续存在。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="architecture-section">
+        <div class="container">
+            <h2>系统架构</h2>
+            <p class="section-subtitle">分层设计，职责清晰</p>
+            <div class="arch-diagram">
+                <div class="arch-flow">
+                    <div class="arch-box frontend">
+                        <h4>前端界面</h4>
+                        <p>HTML + CSS + JS</p>
+                    </div>
+                    <span class="arch-arrow">&#x2192;</span>
+                    <div class="arch-box backend">
+                        <h4>Flask 后端</h4>
+                        <p>RESTful API</p>
+                    </div>
+                    <span class="arch-arrow">&#x2192;</span>
+                    <div class="arch-box database">
+                        <h4>seekdb</h4>
+                        <p>全文检索</p>
+                    </div>
+                </div>
+                <div class="arch-flow">
+                    <div class="arch-box backend">
+                        <h4>知识库服务</h4>
+                        <p>业务逻辑整合</p>
+                    </div>
+                    <span class="arch-arrow">&#x2192;</span>
+                    <div class="arch-box memory">
+                        <h4>PowerContext</h4>
+                        <p>记忆管理</p>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 30px; color: var(--text-light);">
+                    <p><strong>数据流：</strong>用户请求 &#x2192; Flask 路由 &#x2192; 知识库服务 &#x2192; seekdb 检索 + PowerContext 记忆 &#x2192; 返回结果</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="demo" class="demo-section">
+        <div class="container">
+            <h2>快速体验</h2>
+            <p class="section-subtitle">点击下方卡片体验核心功能</p>
+            <div class="demo-grid">
+                <div class="demo-card" onclick="alert('请在本地运行后访问 http://localhost:5000/search?q=深度学习')">
+                    <h4>&#x1f50d; 搜索「深度学习」</h4>
+                    <p>体验 seekdb FTS5 全文检索能力，查看语义相关性排序</p>
+                </div>
+                <div class="demo-card" onclick="alert('请在本地运行后访问 http://localhost:5000/document/1')">
+                    <h4>&#x1f4d6; 查看文档详情</h4>
+                    <p>体验学习进度追踪，标记进度后刷新页面查看恢复效果</p>
+                </div>
+                <div class="demo-card" onclick="alert('请在本地运行后访问 http://localhost:5000/dashboard')">
+                    <h4>&#x1f4ca; 打开学习仪表盘</h4>
+                    <p>查看 PowerContext 记忆数据：学习统计、搜索历史、上下文召回</p>
+                </div>
+                <div class="demo-card" onclick="alert('请在本地运行后访问 http://localhost:5000/api/memory/recall/demo_user')">
+                    <h4>&#x1f9e0; 查看记忆召回</h4>
+                    <p>体验 PowerContext Recall API，查看用户上下文记忆</p>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 40px; padding: 30px; background: var(--bg); border-radius: 15px;">
+                <h3 style="margin-bottom: 15px;">&#x1f4bb; 本地运行体验完整功能</h3>
+                <p style="color: var(--text-light); margin-bottom: 20px;">
+                    项目网站展示项目信息，完整功能需要在本地运行 Flask 应用
+                </p>
+                <a href="#running" class="btn btn-primary" style="background: var(--primary); color: white;">查看运行说明</a>
+            </div>
+        </div>
+    </section>
+
+    <section id="running" class="running-section">
+        <div class="container">
+            <h2>运行说明</h2>
+            <p class="section-subtitle">简单 4 步，启动完整应用</p>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>环境要求</h4>
+                        <p>Python 3.8+ 即可，无需额外数据库或外部服务</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>安装依赖</h4>
+                        <code>pip install -r requirements.txt</code>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>初始化数据库</h4>
+                        <p>自动创建 SQLite 数据库并导入 12 篇示例文档</p>
+                        <code>python init_db.py</code>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>启动服务</h4>
+                        <p>访问 http://localhost:5000 体验完整功能</p>
+                        <code>python app.py</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="validation-section">
+        <div class="container">
+            <h2>验证样例</h2>
+            <p class="section-subtitle">可按步骤执行的完整验证流程</p>
+            <div class="validation-grid">
+                <div class="validation-card">
+                    <h3>&#x1f50d; 样例 1：文献检索</h3>
+                    <ol>
+                        <li>访问首页，在搜索框输入<strong>「深度学习」</strong></li>
+                        <li>点击搜索或按回车</li>
+                        <li>查看搜索结果：应返回「深度学习入门指南」</li>
+                        <li>结果展示标题、摘要、分类、标签和相关度评分</li>
+                    </ol>
+                    <p style="margin-top: 15px; padding: 10px; background: var(--white); border-radius: 8px;">
+                        <strong>技术作用：</strong><br>
+                        &#x2022; seekdb: 执行 FTS5 全文检索，返回相关性评分<br>
+                        &#x2022; PowerContext: 搜索记忆中的相关搜索历史
+                    </p>
+                </div>
+                <div class="validation-card">
+                    <h3>&#x1f4ca; 样例 2：学习进度追踪</h3>
+                    <ol>
+                        <li>点击搜索结果中的文档链接</li>
+                        <li>点击进度按钮标记学习进度（如 <strong>50%</strong>）</li>
+                        <li>关闭页面后重新打开</li>
+                        <li>查看进度是否恢复到 50%</li>
+                    </ol>
+                    <p style="margin-top: 15px; padding: 10px; background: var(--white); border-radius: 8px;">
+                        <strong>技术作用：</strong><br>
+                        &#x2022; PowerContext: 保存和读取 Atomic Memory（learning_progress）<br>
+                        &#x2022; 进度数据跨会话持续存在
+                    </p>
+                </div>
+                <div class="validation-card">
+                    <h3>&#x1f9e0; 样例 3：个性化仪表盘</h3>
+                    <ol>
+                        <li>访问 <strong>/dashboard</strong></li>
+                        <li>查看学习统计：已浏览文档、完成学习、搜索次数</li>
+                        <li>查看「继续学习」列表和「最近搜索」</li>
+                        <li>查看「PowerContext 上下文召回」结果</li>
+                        <li>修改偏好设置并保存</li>
+                    </ol>
+                    <p style="margin-top: 15px; padding: 10px; background: var(--white); border-radius: 8px;">
+                        <strong>技术作用：</strong><br>
+                        &#x2022; PowerContext: Recall Manifest API 召回用户上下文<br>
+                        &#x2022; seekdb: 提供文档元数据统计
+                    </p>
+                </div>
+                <div class="validation-card">
+                    <h3>&#x1f504; 样例 4：记忆搜索</h3>
+                    <ol>
+                        <li>在搜索页搜索任意关键词</li>
+                        <li>查看页面底部的「PowerContext 记忆搜索」区域</li>
+                        <li>应显示相关的记忆搜索结果</li>
+                        <li>访问 <strong>/api/memory/search/demo_user?q=学习</strong></li>
+                    </ol>
+                    <p style="margin-top: 15px; padding: 10px; background: var(--white); border-radius: 8px;">
+                        <strong>技术作用：</strong><br>
+                        &#x2022; PowerContext: Search Artifacts API 搜索记忆内容<br>
+                        &#x2022; 返回匹配的记忆条目和相关度评分
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <h3>&#x1f4da; 智能知识库 - Smart Knowledge Hub</h3>
+            <p>基于 Qoder 开发的智能文献检索与知识管理系统</p>
+            <div class="footer-links">
+                <a href="https://github.com/oceanbase/powercontext" target="_blank">PowerContext</a>
+                <a href="https://github.com/oceanbase/seekdb" target="_blank">seekdb</a>
+                <a href="#running">运行说明</a>
+                <a href="#demo">在线体验</a>
+            </div>
+            <div class="copyright">
+                <p>本项目使用 Qoder Desktop 开发 | 通过 Qoder Sites 发布</p>
+                <p>技术栈：Python Flask + seekdb (SQLite + FTS5) + PowerContext</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scroll for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // Add active class to nav links on scroll
+        window.addEventListener('scroll', () => {
+            const sections = document.querySelectorAll('section[id]');
+            const navLinks = document.querySelectorAll('.nav-links a');
+            
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (pageYOffset >= sectionTop - 200) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

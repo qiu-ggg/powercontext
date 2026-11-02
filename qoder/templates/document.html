@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ document.title }} - 智能知识库</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <a href="/">&#x1f4da; 智能知识库</a>
+            </div>
+            <div class="navbar-menu">
+                <a href="/">首页</a>
+                <a href="/search">检索</a>
+                <a href="/dashboard">仪表盘</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="document-section">
+        <div class="container">
+            <div class="document-header">
+                <h1 id="docTitle">{{ document.title }}</h1>
+                <div class="document-meta">
+                    <span class="meta-category">{{ document.category }}</span>
+                    <span class="meta-date">添加于 {{ document.created_at }}</span>
+                </div>
+                <div class="document-tags">
+                    {% for tag in document.tags.split(',') %}
+                    <span class="tag">{{ tag.strip() }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="learning-progress-card">
+                <h3>&#x1f4ca; 学习进度 (PowerContext)</h3>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <span class="progress-text" id="progressText">0%</span>
+                </div>
+                <div class="progress-controls">
+                    <button class="btn-secondary" onclick="markAsRead(25)">25%</button>
+                    <button class="btn-secondary" onclick="markAsRead(50)">50%</button>
+                    <button class="btn-secondary" onclick="markAsRead(75)">75%</button>
+                    <button class="btn-secondary" onclick="markAsRead(100)">100%</button>
+                </div>
+                <div id="progressStatus" class="progress-status"></div>
+            </div>
+
+            <div class="document-content">
+                <article>
+                    {{ document.content }}
+                </article>
+            </div>
+
+            <div class="related-docs">
+                <h3>相关文档 (seekdb 检索)</h3>
+                <div id="relatedList" class="related-list">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <div class="document-actions">
+                <button class="btn-primary" onclick="window.history.back()">&#x2190; 返回</button>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>智能知识库 - Smart Knowledge Hub</p>
+        </div>
+    </footer>
+
+    <script>
+        const userId = 'demo_user';
+        const docId = {{ document.document_id }};
+        let startTime = Date.now();
+
+        async function loadProgress() {
+            try {
+                const response = await fetch('/api/document/' + docId + '?user_id=' + userId);
+                const data = await response.json();
+                if (data.learning_progress) {
+                    const progress = data.learning_progress.progress || 0;
+                    updateProgressUI(progress * 100);
+                }
+            } catch (error) {
+                console.error('加载进度失败:', error);
+            }
+        }
+
+        function updateProgressUI(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = Math.round(percent) + '%';
+        }
+
+        async function markAsRead(percent) {
+            const statusEl = document.getElementById('progressStatus');
+            try {
+                const response = await fetch('/api/progress/' + docId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        progress: percent / 100,
+                        last_position: percent
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    updateProgressUI(percent);
+                    statusEl.textContent = '已保存到 PowerContext (' + percent + '%)';
+                    statusEl.className = 'progress-status success';
+                } else {
+                    statusEl.textContent = '保存失败';
+                    statusEl.className = 'progress-status error';
+                }
+                setTimeout(function() { statusEl.textContent = ''; }, 3000);
+            } catch (error) {
+                statusEl.textContent = '保存失败: ' + error.message;
+                statusEl.className = 'progress-status error';
+            }
+        }
+
+        async function loadRelated() {
+            try {
+                const tags = '{{ document.tags }}';
+                const category = '{{ document.category }}';
+                const response = await fetch('/api/search?q=' + encodeURIComponent(tags) + '&category=' + encodeURIComponent(category) + '&user_id=' + userId + '&limit=5');
+                const data = await response.json();
+                const related = (data.results || []).filter(function(r) { return r.document_id !== docId; }).slice(0, 4);
+                const container = document.getElementById('relatedList');
+
+                if (related.length === 0) {
+                    container.innerHTML = '<div class="empty-state">暂无相关文档</div>';
+                    return;
+                }
+
+                container.innerHTML = related.map(function(doc) {
+                    return '<div class="related-item" onclick="window.location=\'/document/' + doc.document_id + '\'">' +
+                        '<h4>' + escapeHtml(doc.title) + '</h4>' +
+                        '<p>' + escapeHtml(doc.content.substring(0, 100)) + '...</p>' +
+                    '</div>';
+                }).join('');
+            } catch (error) {
+                console.error('加载相关文档失败:', error);
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
+        }
+
+        window.addEventListener('beforeunload', function() {
+            var viewDuration = Math.floor((Date.now() - startTime) / 1000);
+            if (viewDuration > 3) {
+                var data = new FormData();
+                data.append('user_id', userId);
+                data.append('view_duration', String(viewDuration));
+                navigator.sendBeacon('/api/document/' + docId, data);
+            }
+        });
+
+        window.addEventListener('load', function() {
+            loadProgress();
+            loadRelated();
+        });
+    </script>
+</body>
+</html>

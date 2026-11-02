@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仪表盘 - 智能知识库</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <a href="/">&#x1f4da; 智能知识库</a>
+            </div>
+            <div class="navbar-menu">
+                <a href="/">首页</a>
+                <a href="/search">检索</a>
+                <a href="/dashboard" class="active">仪表盘</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="dashboard-section">
+        <div class="container">
+            <h2>学习仪表盘</h2>
+            <p class="section-desc">PowerContext 记忆驱动的个性化学习追踪</p>
+
+            <div class="stats-grid">
+                <div class="stat-card-large">
+                    <div class="stat-icon">&#x1f4da;</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="docsViewed">0</div>
+                        <div class="stat-label">已浏览文档</div>
+                    </div>
+                </div>
+                <div class="stat-card-large">
+                    <div class="stat-icon">&#x2705;</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="docsCompleted">0</div>
+                        <div class="stat-label">完成学习</div>
+                    </div>
+                </div>
+                <div class="stat-card-large">
+                    <div class="stat-icon">&#x23f1;&#xfe0f;</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="totalTime">0m</div>
+                        <div class="stat-label">总学习时长</div>
+                    </div>
+                </div>
+                <div class="stat-card-large">
+                    <div class="stat-icon">&#x1f525;</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="searchCount">0</div>
+                        <div class="stat-label">搜索次数</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="dashboard-card">
+                    <h3>&#x1f4d6; 继续学习</h3>
+                    <div id="continueLearning" class="learning-list">
+                        <div class="loading">加载中...</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card">
+                    <h3>&#x1f50d; 最近搜索</h3>
+                    <div id="recentSearches" class="search-list">
+                        <div class="loading">加载中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-card">
+                <h3>&#x1f9e0; PowerContext 上下文召回</h3>
+                <div id="contextRecall" class="context-list">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <div class="dashboard-card">
+                <h3>&#x2699;&#xfe0f; 偏好设置</h3>
+                <div class="preferences-form">
+                    <div class="form-group">
+                        <label>学习兴趣</label>
+                        <input type="text" id="interests" placeholder="例如：机器学习、Python、数据库" />
+                    </div>
+                    <div class="form-group">
+                        <label>学习目标</label>
+                        <select id="learningGoal">
+                            <option value="casual">休闲学习</option>
+                            <option value="systematic">系统学习</option>
+                            <option value="research">深入研究</option>
+                            <option value="exam">备考复习</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary" onclick="savePreferences()">保存设置</button>
+                    <span id="saveStatus" class="save-status"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>智能知识库 - Smart Knowledge Hub</p>
+        </div>
+    </footer>
+
+    <script>
+        const userId = 'demo_user';
+
+        async function loadDashboard() {
+            try {
+                const [analyticsRes, dashboardRes, preferencesRes, recallRes] = await Promise.all([
+                    fetch('/api/analytics/' + userId),
+                    fetch('/api/dashboard/' + userId),
+                    fetch('/api/preferences/' + userId),
+                    fetch('/api/memory/recall/' + userId + '?limit=10')
+                ]);
+
+                const analytics = await analyticsRes.json();
+                const dashboard = await dashboardRes.json();
+                const preferences = await preferencesRes.json();
+                const recall = await recallRes.json();
+
+                document.getElementById('docsViewed').textContent = analytics.total_documents_viewed || 0;
+                document.getElementById('docsCompleted').textContent = analytics.documents_completed || 0;
+
+                const totalSec = analytics.total_study_time || 0;
+                if (totalSec >= 3600) {
+                    document.getElementById('totalTime').textContent = Math.floor(totalSec / 3600) + 'h';
+                } else {
+                    document.getElementById('totalTime').textContent = Math.floor(totalSec / 60) + 'm';
+                }
+
+                document.getElementById('searchCount').textContent = analytics.total_searches || 0;
+
+                renderContinueLearning(dashboard.continue_learning || []);
+                renderRecentSearches(dashboard.recent_searches || []);
+                renderContextRecall(recall.entries || []);
+
+                if (preferences.preferences) {
+                    document.getElementById('interests').value = preferences.preferences.interests || '';
+                    document.getElementById('learningGoal').value = preferences.preferences.learning_goal || 'casual';
+                }
+
+            } catch (error) {
+                console.error('加载仪表盘数据失败:', error);
+            }
+        }
+
+        function renderContinueLearning(items) {
+            const container = document.getElementById('continueLearning');
+            if (items.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无未完成的学习记录</div>';
+                return;
+            }
+            container.innerHTML = items.map(function(item) {
+                return '<div class="learning-item">' +
+                    '<div class="learning-info">' +
+                        '<h4><a href="/document/' + item.document_id + '">' + escapeHtml(item.title) + '</a></h4>' +
+                        '<span class="learning-category">' + escapeHtml(item.category) + '</span>' +
+                    '</div>' +
+                    '<div class="learning-progress">' +
+                        '<div class="progress-bar"><div class="progress-fill" style="width: ' + (item.progress * 100) + '%"></div></div>' +
+                        '<span class="progress-text">' + Math.round(item.progress * 100) + '%</span>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        function renderRecentSearches(items) {
+            const container = document.getElementById('recentSearches');
+            if (items.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无搜索记录</div>';
+                return;
+            }
+            container.innerHTML = items.map(function(item) {
+                return '<div class="search-item" onclick="window.location=\'/search?q=' + encodeURIComponent(item.query) + '\'">' +
+                    '<div class="search-query">' + escapeHtml(item.query) + '</div>' +
+                    '<div class="search-meta">' +
+                        '<span>' + item.results_count + ' 个结果</span>' +
+                        '<span>' + formatTime(item.timestamp) + '</span>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        function renderContextRecall(entries) {
+            const container = document.getElementById('contextRecall');
+            if (entries.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无上下文记忆</div>';
+                return;
+            }
+            container.innerHTML = '<div class="recall-grid">' + entries.map(function(entry) {
+                var contentPreview = '';
+                if (typeof entry.content === 'string') {
+                    contentPreview = entry.content.substring(0, 80);
+                } else {
+                    contentPreview = JSON.stringify(entry.content).substring(0, 80);
+                }
+                return '<div class="recall-item">' +
+                    '<div class="recall-header">' +
+                        '<span class="recall-kind">' + escapeHtml(entry.kind) + '</span>' +
+                        '<span class="recall-id">' + escapeHtml(entry.artifact_id) + '</span>' +
+                    '</div>' +
+                    '<p class="recall-text">' + escapeHtml(contentPreview) + '...</p>' +
+                '</div>';
+            }).join('') + '</div>';
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            var date = new Date(timestamp);
+            var now = new Date();
+            var diff = now - date;
+            if (isNaN(diff)) return '';
+            if (diff < 60000) return '刚刚';
+            if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+            return Math.floor(diff / 86400000) + ' 天前';
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
+        }
+
+        async function savePreferences() {
+            const interests = document.getElementById('interests').value;
+            const learningGoal = document.getElementById('learningGoal').value;
+            const statusEl = document.getElementById('saveStatus');
+
+            try {
+                const response = await fetch('/api/preferences/' + userId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        preferences: {
+                            interests: interests,
+                            learning_goal: learningGoal,
+                            updated_at: new Date().toISOString()
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    statusEl.textContent = '已保存到 PowerContext';
+                    statusEl.className = 'save-status success';
+                } else {
+                    statusEl.textContent = '保存失败';
+                    statusEl.className = 'save-status error';
+                }
+                setTimeout(function() { statusEl.textContent = ''; }, 3000);
+            } catch (error) {
+                statusEl.textContent = '保存失败: ' + error.message;
+                statusEl.className = 'save-status error';
+            }
+        }
+
+        window.addEventListener('load', loadDashboard);
+    </script>
+</body>
+</html>
