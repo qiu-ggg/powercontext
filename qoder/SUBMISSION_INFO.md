@@ -5,7 +5,7 @@
 - 分支：`2026-competition-ecosystem`
 - Commit id：以本分支最新提交为准（`git rev-parse HEAD`）；压缩包外层 `SUBMISSION_INFO.md` 记录最终 SHA
 - 作品目录：仓库中的 `qoder/`
-- 作品链接（Qoder Site）：https://smartknowledgehub-2yrvvh4q95p.qoder.zone
+- 作品链接（Qoder Site）：https://smartknowledgehub-2yrvvh4q95p.qoder.zone （静态快照，`/api/*` 不可用）
 - Qoder 账号 UID：`01a19235-1324-7a33-89c7-ecb6d3abe5bf`
 
 ## Qoder 开发证据
@@ -21,10 +21,12 @@
 
 ## PowerContext 原始调用日志
 
-- `docs/logs/powercontext-calls-2026-11-03.log`：完整请求与响应
+- `docs/logs/powercontext-calls-2026-11-03.log`：完整请求与响应（较早一次采集）
+- `docs/evidence/remote-run.log`：最终 1.4.1 实例启动日志与 `/health/ready`
+- `docs/evidence/api-samples.log`：12 个真实 HTTP 响应，含 `artifact.revision` 递增
 - `tools/capture_powercontext_log.py`：采集脚本
 - 覆盖 `/v1/scopes`、`/v1/memory/remember`、`/v1/memory/search`（`mode: "fts"`）、
-  `/v1/context/prepare`、`/v1/memory/entries/retire`
+  `/v1/context/prepare`、原子记忆更新与 lifecycle
 
 ## 运行方式
 
@@ -41,6 +43,7 @@ python app.py
 
 ## 技术真实性
 
-- PowerContext 1.4.1：真实 HTTP 服务接入，默认 remote，已实测。
+- PowerContext 1.4.1：真实 HTTP 服务接入，默认 remote，已实测；记忆更新使用原子记忆 PUT + `If-Match`，停用使用 lifecycle。
 - 检索层：本地 SQLite FTS5 兼容检索层，未声称运行官方 seekdb。
-- WorkBuddy 旧演示站：静态快照，`/api/*` 返回 403，不作为验收证据。
+- Qoder Sites 展示页：静态快照，`/api/*` 不可用；功能需按 `RUNNING.md` 本地运行。
+- WorkBuddy 旧演示站：同为静态快照，不作为验收证据。

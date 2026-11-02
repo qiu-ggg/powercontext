@@ -5,10 +5,10 @@ PowerContext 远程客户端
 与 services/powercontext_service.py 的本地兼容实现不同，本模块不发 SQL，
 所有读写都由 PowerContext Server 完成：
   - Scope：POST /v1/scopes（以 user_id 派生的幂等键创建/复用）
-  - 写入：POST /v1/memory/remember、POST /v1/memory/entries/revise
+  - 写入：POST /v1/memory/remember；更新用 PUT .../artifacts/atomic-memory/{artifact_id} + If-Match
   - 读取：POST /v1/memory/entries/list
   - 搜索：POST /v1/memory/search（服务端 FTS 检索）
-  - 删除：POST /v1/memory/entries/retire
+  - 停用：POST /v1/atomic-memory/lifecycle（state=forgotten）
 
 本模块只依赖标准库，便于在离线/内网环境运行。
 """

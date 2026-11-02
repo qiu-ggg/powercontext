@@ -15,8 +15,7 @@
 | 前端 | HTML + CSS + JavaScript | 响应式，无前端构建步骤 |
 | 检索层 | SQLite + FTS5 | seekdb 兼容检索层，**未连接 seekdb 服务**；向量检索为预留字段 |
 | 上下文服务 | PowerContext Server 1.4.1 | 默认 `POWERCONTEXT_MODE=remote`，不可达直接报错；显式 `auto`/`local` 才使用本地兼容实现 |
-| 展示页 | Qoder Sites | https://smartknowledgehub-2yrvvh4q95p.qoder.zone （静态快照，功能需本地运行） |
-| 应用部署 | WorkBuddy | 线上演示需要 Python 运行时 |
+| 展示页 | Qoder Sites | https://smartknowledgehub-2yrvvh4q95p.qoder.zone （**静态快照**，不运行 Flask，`/api/*` 不可用） |
 
 详细边界与验证记录见 [docs/TECHNICAL_BOUNDARIES.md](docs/TECHNICAL_BOUNDARIES.md)。
 
@@ -44,10 +43,10 @@
 
 - `POST /v1/scopes`：以 `smart-knowledge-hub:{user_id}` 为幂等键创建/复用 Scope
 - `POST /v1/memory/remember`：新增记忆
-- `POST /v1/memory/entries/revise`：按 kind 更新已有记忆（冲突时重读后重试一次）
+- `PUT /v1/scopes/{scope_id}/artifacts/atomic-memory/{artifact_id}`：按 `If-Match: "revision:N"` 更新已有记忆（冲突时重读 revision 后重试一次）
 - `POST /v1/memory/entries/list`：读取活动记忆
 - `POST /v1/memory/search`：记忆搜索（当前服务未配置嵌入模型，返回 `mode: "fts"`）
-- `POST /v1/memory/entries/retire`：停用记忆，保留历史
+- `POST /v1/atomic-memory/lifecycle`：以 `state=forgotten` 停用记忆，保留历史
 
 `GET /api/health` 与仪表盘徽标会显示当前实际后端：
 
@@ -57,11 +56,11 @@
 
 ## 快速开始
 
-环境要求：Python 3.8+（运行 Flask 应用）；如需真实 PowerContext 服务，另需 Python 3.11+。
+环境要求：Python 3.8+（运行 Flask 应用）；真实 PowerContext 服务需要 Python 3.11+，是默认 `remote` 模式的必需依赖，启动步骤见 [RUNNING.md](RUNNING.md) 第 3 节。
 
 ```bash
 pip install -r requirements.txt
-python init_db.py          # 创建 SQLite 检索库并写入 12 篇示例文档
+python init_db.py          # 需先启动 PowerContext Server
 python app.py              # http://localhost:5000
 ```
 
@@ -85,10 +84,16 @@ SmartKnowledgeHub/
 ├── web/                            # Qoder Sites 展示页（静态）
 ├── docs/
 │   ├── TECHNICAL_BOUNDARIES.md     # 技术真实性与边界说明
+│   ├── evidence/                   # 1.4.1 最终验证日志与 12 个 HTTP 响应样本
+│   ├── qoder-sessions/             # Qoder 对话证据（需求拆解 / 编码 / 调试）
+│   ├── logs/                       # PowerContext 原始 HTTP 调用日志
 │   └── screenshots/                # 实机截图
+├── tools/
+│   └── capture_powercontext_log.py # 原始调用日志采集脚本
 ├── RUNNING.md
 ├── QUICKSTART.md
 ├── QODER_DEVELOPMENT_LOG.md
+├── SUBMISSION_INFO.md
 └── SUBMISSION_CHECKLIST.md
 ```
 
@@ -145,15 +150,24 @@ SmartKnowledgeHub/
 
 - 学习时长长期为 0：`sendBeacon` 发往只允许 GET 的接口返回 405；已支持 POST，并让分析接口汇总 `view_duration`
 - 相关文档被记为搜索、出现重复历史：相关推荐请求改为 `record=0`；相同查询 30 秒内只保留一条
-- 技术真实性：新增真实 PowerContext 远程客户端；seekdb 一侧如实标注为本地 FTS5 检索层
+- 技术真实性：检索层如实标注为「SQLite FTS5 兼容检索层」，展示页标注为静态快照；默认模式改为 `remote`，服务不可达直接报错
+- PowerContext 1.4.1：二次保存改用原子记忆 PUT + `If-Match` 修订号，停用改用 lifecycle，不再依赖旧 citation 响应结构
+
+## Qoder 开发证据
+
+- `docs/qoder-sessions/`：需求拆解、编码实现、调试排错三类对话截图（附 HTML 原文，敏感信息已移除）
+- `docs/logs/powercontext-calls-2026-11-03.log`：真实 PowerContext 的原始 HTTP 请求与响应
+- `docs/evidence/`：最终 1.4.1 实例的启动日志与 12 个真实 HTTP 响应，含 `artifact.revision` 递增记录
+- `docs/TECHNICAL_BOUNDARIES.md`：技术边界、实测记录与已知限制
 
 ## 提交信息
 
 - 仓库：https://github.com/qiu-ggg/powercontext
 - 分支：`2026-competition-ecosystem`
 - 作品目录：`qoder/`
-- Qoder Sites：https://smartknowledgehub-2yrvvh4q95p.qoder.zone
-- 线上演示：https://grudge-tavern.apps.workbuddy.host/?sharecode=UNV2MJ3RH3（较早部署版本，最新代码以仓库为准）
+- Qoder UID：`01a19235-1324-7a33-89c7-ecb6d3abe5bf`
+- Qoder Sites：https://smartknowledgehub-2yrvvh4q95p.qoder.zone （静态快照，`/api/*` 不可用）
+- 最终 Commit：以分支最新提交为准（`git rev-parse HEAD`，见 `SUBMISSION_INFO.md`）
 
 ## 许可证
 

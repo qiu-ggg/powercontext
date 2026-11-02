@@ -146,6 +146,7 @@
       <li><a href="#tech">技术</a></li>
       <li><a href="#fixes">本轮修复</a></li>
       <li><a href="#validation">验证</a></li>
+      <li><a href="#qoder">对话证据</a></li>
       <li><a href="#run">运行</a></li>
       <li><a href="#evidence">材料</a></li>
     </ul>
@@ -168,16 +169,16 @@
       <span class="badge">Qoder 开发</span>
       <span class="badge ok">PowerContext Server 1.4.1 · 已实测</span>
       <span class="badge">SQLite FTS5 兼容检索层</span>
-      <span class="badge">Qoder Sites 静态发布</span>
+      <span class="badge">Qoder Sites · 静态快照</span>
     </div>
     <div class="cta">
-      <a class="btn btn-primary" href="#run">本地运行步骤</a>
+      <a class="btn btn-primary" href="#run">本地运行方式</a>
       <a class="btn btn-ghost" href="https://github.com/qiu-ggg/powercontext/tree/2026-competition-ecosystem/qoder" target="_blank" rel="noopener">查看源码（qoder/）</a>
       <a class="btn btn-ghost" href="#tech">技术实现与边界</a>
     </div>
     <div class="notice">
-      下方截图与数据来自本机 <code>POWERCONTEXT_MODE=remote</code> 实测；完整日志见仓库
-      <code>qoder/docs/evidence/</code>。静态页不提供在线交互。
+      本页是静态快照，<code>/api/*</code> 在该域名下不可用；功能需按「运行说明」本地启动 Flask 与 PowerContext Server。
+      应用默认 <code>POWERCONTEXT_MODE=remote</code>，服务不可达会直接报错，不会静默降级。
     </div>
   </div>
 </header>
@@ -221,8 +222,8 @@
           <tr>
             <td><strong>PowerContext</strong><br />上下文记忆</td>
             <td>
-              默认 <code>POWERCONTEXT_MODE=remote</code>：启动时必须连上真实服务，所有 Scope、Memory 读写与搜索都走 HTTP，不可达直接报错；
-              只有显式设置 <code>auto</code> 才允许探测失败后回退，<code>local</code> 仅用于离线演示。
+              默认 <code>POWERCONTEXT_MODE=remote</code>：启动时探测真实服务，不可达直接报错，不会静默降级；
+              显式设为 <code>auto</code> 才允许探测失败后回退，<code>local</code> 仅用于离线演示。
               页面与 <code>/api/health</code> 会显示当前实际后端。
             </td>
             <td>
@@ -234,7 +235,7 @@
             <td><strong>检索层</strong><br />文档与全文检索</td>
             <td>
               使用本地 SQLite + FTS5（unicode61 分词）保存文档并做关键词检索，附分类过滤与相关度排序；
-              这是 seekdb 兼容检索层，<strong>未连接 seekdb 服务</strong>；
+              即 <strong>SQLite FTS5 兼容检索层</strong>，当前未连接 seekdb 服务；
               向量检索为预留字段，<code>vector_score</code> 恒为 0，不参与排序。
             </td>
             <td>
@@ -244,7 +245,7 @@
           </tr>
           <tr>
             <td><strong>Qoder Sites</strong><br />展示页发布</td>
-            <td>本页即通过 Qoder Sites 发布的展示页；应用本体是需要 Python 运行时的 Flask 服务，另部署在 WorkBuddy。</td>
+            <td>本页即通过 Qoder Sites 发布的展示页，是<strong>静态快照</strong>，不运行 Flask/PowerContext，<code>/api/*</code> 不可用；应用本体需按「运行说明」在本地启动。</td>
             <td>页面地址为 <code>*.qoder.zone</code>，由 Qoder Sites 发布记录生成。</td>
           </tr>
         </tbody>
@@ -256,18 +257,19 @@
         <h3>真实 PowerContext 调用链</h3>
         <ul>
           <li><strong>Scope</strong>：<code>POST /v1/scopes</code>，以 <code>smart-knowledge-hub:{user_id}</code> 为幂等键，重复启动不会创建重复空间。</li>
-          <li><strong>写入</strong>：<code>POST /v1/memory/remember</code>；已存在则 <code>/v1/memory/entries/revise</code> 更新，冲突时重读后重试一次。</li>
+          <li><strong>写入</strong>：<code>POST /v1/memory/remember</code>；已存在则用 <code>PUT /v1/scopes/{scope_id}/artifacts/atomic-memory/{artifact_id}</code> 并按 <code>If-Match: "revision:N"</code> 更新，冲突时重读修订号后重试一次。</li>
           <li><strong>读取</strong>：<code>POST /v1/memory/entries/list</code>，按 kind 取活动条目。</li>
           <li><strong>搜索</strong>：<code>POST /v1/memory/search</code>，当前配置无生成/嵌入模型，服务端使用 FTS 模式。</li>
-          <li><strong>删除</strong>：<code>POST /v1/memory/entries/retire</code>，保留历史而不是物理删除。</li>
+          <li><strong>删除</strong>：<code>POST /v1/atomic-memory/lifecycle</code>，<code>state=forgotten</code>，保留历史而不是物理删除。</li>
         </ul>
       </div>
       <div class="card">
-        <h3>为什么保留本地兼容实现</h3>
+        <h3>本地兼容实现的定位</h3>
         <ul>
-          <li>默认 <code>remote</code> 下不会静默回退；只有显式设置 <code>auto</code> 且探测失败，或显式 <code>local</code> 时才启用。</li>
+          <li>默认模式是 <code>remote</code>：真实服务不可达时应用直接报错，不会静默降级。</li>
+          <li><code>local</code> 只用于没有 Python 运行时或离线预览页面的场景，验收时不使用。</li>
           <li>兼容层的 Scope / Memory / Search / Recall 语义与真实服务对齐，但代码与页面都会明确标注「本地兼容实现」。</li>
-          <li>本地兼容实现只用于离线演示，两种模式的数据分开存放，不会互相冒充。</li>
+          <li>两种模式的数据分开存放，不会互相冒充。</li>
         </ul>
       </div>
     </div>
@@ -296,8 +298,8 @@
       <div class="fix">
         <div class="tick">3</div>
         <div>
-          <strong>技术真实性说明不清</strong>
-          <p>新增真实 PowerContext HTTP 客户端与远程模式并设为默认；页面、健康检查、接口返回都显示实际后端。检索层统一表述为「SQLite FTS5 兼容检索层」，明确未连接 seekdb 服务。</p>
+          <strong>技术真实性与默认模式</strong>
+          <p>新增真实 PowerContext HTTP 客户端，默认 <code>POWERCONTEXT_MODE=remote</code>，服务不可达直接报错；检索层明确写为「SQLite FTS5 兼容检索层」，并标注 Qoder Sites 页面是静态快照、<code>/api/*</code> 不可用。1.4.1 的二次保存改用原子记忆 PUT + If-Match，运行日志见 <code>docs/evidence/</code>。</p>
         </div>
       </div>
     </div>
@@ -346,22 +348,54 @@
   </div>
 </section>
 
+<section id="qoder">
+  <div class="container">
+    <h2>Qoder 对话证据</h2>
+    <p class="sub">
+      以下截图整理自本机 Qoder 会话记录，覆盖需求拆解、编码实现、调试排错三个阶段；原文与可复核的 HTML 在仓库
+      <code>qoder/docs/qoder-sessions/</code>，敏感信息已移除。
+    </p>
+    <div class="shots">
+      <figure class="shot">
+        <img src="images/qoder-requirements.png" alt="Qoder 需求拆解会话截图：比赛要求、现有代码问题、执行顺序与范围边界" />
+        <figcaption>需求拆解：从比赛要求拆出可运行闭环，并确定真实 PowerContext + SQLite FTS5 兼容层的边界。</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="images/qoder-coding.png" alt="Qoder 编码会话截图：PowerContext 远程客户端与 Scope 幂等创建代码" />
+        <figcaption>编码实现：生成远程客户端，Scope 幂等创建、记忆读写与检索由真实服务完成。</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="images/qoder-debugging.png" alt="Qoder 调试会话截图：端口占用、学习时长为 0、搜索历史重复的定位与修复" />
+        <figcaption>调试排错：定位端口占用、405 与统计字段错位，并给出修复后的实测数据。</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="images/qoder-site.png" alt="Qoder Sites 发布记录截图" />
+        <figcaption>Qoder Sites：发布记录返回 <code>published: true</code>，页面可通过 <code>*.qoder.zone</code> 访问。</figcaption>
+      </figure>
+    </div>
+    <p class="sub" style="margin-top: 18px;">
+      真实调用日志：<code>qoder/docs/logs/powercontext-calls-2026-11-03.log</code>（scope、remember、search、prepare 的请求与响应全文）；
+      最终 1.4.1 实例的启动日志与 12 个真实 HTTP 响应在 <code>qoder/docs/evidence/</code>，含 <code>artifact.revision</code> 递增记录。
+    </p>
+  </div>
+</section>
+
 <section id="run" class="alt">
   <div class="container">
     <h2>运行说明</h2>
-    <p class="sub">本页是静态快照，功能需本地运行：先启动 PowerContext Server，再按 <code>POWERCONTEXT_MODE=remote</code>（默认）启动 Flask。</p>
+    <p class="sub">功能需在本地运行：本页是静态快照。1–4 步启动完整应用；真实 PowerContext 是默认 <code>remote</code> 模式的必需依赖。</p>
     <div class="run">
       <div class="run-step">
         <h3>1. 安装依赖</h3>
         <p><code>pip install -r requirements.txt</code>（Flask、flask-cors）</p>
       </div>
       <div class="run-step">
-        <h3>2. 启动 PowerContext Server（默认 remote 必需）</h3>
-        <p><code>pip install "powercontext[server,cli]"</code> 后执行 <code>powercontext config init --template</code> 生成 <code>.env</code>，再运行 <code>powercontext server run --env-file .env --role all</code>，默认监听 127.0.0.1:8000。本项目按 API v1.4 对接，实测版本 1.4.1。</p>
+        <h3>2.（必选）启动真实 PowerContext Server</h3>
+        <p><code>pip install "powercontext[server,cli]"</code> 后执行 <code>powercontext config init --template</code> 生成 <code>.env</code>，再运行 <code>powercontext server run --env-file .env --role all</code>，默认监听 127.0.0.1:8000。本项目按 API v1.4 对接，实测版本 1.4.1；服务不可达时应用会拒绝启动。</p>
       </div>
       <div class="run-step">
         <h3>3. 初始化数据</h3>
-        <p><code>python init_db.py</code>：创建 SQLite 检索库并写入 12 篇示例文档；示例记忆写入真实 PowerContext（默认 remote，不可达会报错）。</p>
+        <p><code>python init_db.py</code>：创建 SQLite 检索库并写入 12 篇示例文档；示例记忆写入 <code>remote</code> 模式连接的真实 PowerContext 服务。</p>
       </div>
       <div class="run-step">
         <h3>4. 启动应用</h3>
@@ -369,7 +403,7 @@
       </div>
     </div>
     <p class="sub" style="margin-top: 18px;">
-      环境变量：<code>POWERCONTEXT_MODE</code> 取 <code>remote</code>（默认，不可达即报错）/ <code>auto</code>（允许回退）/ <code>local</code>（仅离线演示）；
+      环境变量：<code>POWERCONTEXT_MODE</code> 取 <code>remote</code>（默认，不可达即报错）/ <code>auto</code> / <code>local</code>；
       <code>POWERCONTEXT_BASE_URL</code> 默认 <code>http://127.0.0.1:8000</code>。
     </p>
   </div>
@@ -392,10 +426,11 @@
       <div class="card">
         <h3>页面与演示</h3>
         <ul>
-          <li>Qoder Sites 展示页：本页</li>
-          <li>在线演示（WorkBuddy 部署）：<a href="https://grudge-tavern.apps.workbuddy.host/?sharecode=UNV2MJ3RH3" target="_blank" rel="noopener">打开</a></li>
-          <li>本地应用：<code>http://localhost:5000</code></li>
+          <li>Qoder Sites 展示页：本页（静态快照，<code>/api/*</code> 不可用）</li>
+          <li>本地应用：<code>http://localhost:5000</code>（需先启动 PowerContext Server）</li>
           <li>截图：<code>qoder/docs/screenshots/</code></li>
+          <li>运行日志与 HTTP 样本：<code>qoder/docs/evidence/</code></li>
+          <li>提交信息：<code>qoder/SUBMISSION_INFO.md</code></li>
         </ul>
       </div>
     </div>
@@ -415,7 +450,7 @@
       <a href="#run">运行说明</a>
     </div>
     <div class="copyright">
-      Python Flask · SQLite FTS5 检索层 · PowerContext Server 1.4.1（可选） · 使用 Qoder Desktop 开发，通过 Qoder Sites 发布
+      Python Flask · SQLite FTS5 兼容检索层 · PowerContext Server 1.4.1（必选，remote 默认） · 使用 Qoder Desktop 开发，通过 Qoder Sites 发布
     </div>
   </div>
 </footer>

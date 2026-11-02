@@ -7,8 +7,8 @@
 - **项目名称**: 智能知识库（Smart Knowledge Hub）
 - **赛道**: Qoder × OceanBase
 - **开发工具**: Qoder
-- **技术结合**: PowerContext 1.4.1（真实 HTTP 服务，已接入）+ seekdb 兼容检索层（本地 SQLite FTS5，如实标注）
-- **项目位置**: `D:\SmartKnowledgeHub`
+- **技术结合**: PowerContext 1.4.1（真实 HTTP 服务，默认 remote）+ SQLite FTS5 兼容检索层（seekdb 兼容接口，如实标注）
+- **项目位置**: 仓库内 `qoder/` 目录（不依赖作者本机路径）
 
 ---
 
@@ -20,12 +20,12 @@
 
 **状态**: 已通过 Qoder Sites 发布
 - 发布记录：`get_publish_status` 返回 `published: true`
-- 已用无痕环境验证：首页、搜索页、仪表盘、文档页均可访问
+- 已验证展示页首页与各区块可访问
 - 截图：`docs/screenshots/qoder-site.png`
 
-**内容说明**：该站点是提交展示页（项目说明、技术实现、验证数据、截图、运行方式、材料入口），不是线上 Flask 运行实例。Flask 应用需要按 `RUNNING.md` 在本地启动；线上不能运行 Flask 的原因已在站点和 `docs/TECHNICAL_BOUNDARIES.md` 中写明。
+**内容说明**：该站点是**静态快照**（项目说明、技术实现、验证数据、截图、运行方式、材料入口），Qoder Sites 只托管 HTML，不运行 Flask/PowerContext，`/api/health`、`/api/stats` 等接口在该域名下不可用。完整功能需按 `RUNNING.md` 在本地启动。
 
-> 注：早期曾用 WorkBuddy 部署过一个旧版演示站，它反映的是接入真实 PowerContext 之前的版本，不能作为本次验收依据。以本 Qoder Site 与本地可运行源码为准。
+> 注：早期曾用 WorkBuddy 部署过一个旧版演示站，同样是静态快照，`/api/*` 不可用，不能作为本次验收依据。以本 Qoder Site 与仓库内可运行源码为准。
 
 ---
 
@@ -40,9 +40,13 @@
 - [x] `README.md` / `RUNNING.md` / `QUICKSTART.md` / `PROJECT_STRUCTURE.md`
 - [x] `QODER_DEVELOPMENT_LOG.md`（Qoder 开发记录）
 - [x] `docs/TECHNICAL_BOUNDARIES.md`（技术真实性说明与实测记录）
-- [x] `docs/screenshots/`（本地运行与 Qoder Site 截图）
+- [x] `docs/screenshots/`（本地运行、Qoder Site 与 Qoder 对话截图）
+- [x] `docs/logs/`（PowerContext 原始请求/响应日志）
+- [x] `docs/evidence/`（1.4.1 最终验证：启动日志 + 12 个真实 HTTP 响应）
+- [x] `docs/qoder-sessions/`（需求拆解、编码、调试对话截图）
 - [x] `requirements.txt` / `.env.example` / `.gitignore`
 - [x] `web/`（提交展示页源码）
+- [x] `SUBMISSION_INFO.md`
 
 **公开状态**: 仓库已按要求提供访问权限；提交时使用测评平台登记时的只读令牌，令牌不写入任何文件。
 
@@ -53,10 +57,10 @@
 **文件**: `RUNNING.md`
 
 包含：
-- Python 3.8+ 运行 Flask 应用（默认 `POWERCONTEXT_MODE=remote`，需先启动真实服务）
-- 启动真实 PowerContext Server 1.4.1（Python 3.11+，安装/初始化/启动/健康检查），默认模式必需
-- 初始化与启动命令、三种运行模式（remote 默认 / auto / local）
-- 功能验证步骤与回归检查（学习时长、搜索去重）
+- Python 3.8+ 运行 Flask 应用
+- 必选接入真实 PowerContext Server 1.4.1（Python 3.11+，安装/初始化/启动/健康检查）
+- 默认 `POWERCONTEXT_MODE=remote`；`local` 仅用于离线预览
+- 初始化与启动命令、功能验证步骤与回归检查（学习时长、搜索去重）
 - 数据重置方式
 
 ---
@@ -71,11 +75,12 @@
 2. **学习进度追踪**：文档页标记 25%/50%/75%/100% → PowerContext 保存 `learning_progress` 记忆，刷新后恢复，仪表盘汇总。
 3. **个性化仪表盘**：展示浏览数、完成数、累计学习时长、搜索次数、继续学习列表、上下文召回和偏好设置。
 
-**实测数据**（远程模式，2026-11-02）：
+**实测数据**（远程模式，2026-11-03 最终验证）：
 - 初始化 12 篇文档
 - 学习时长：6200 秒 → 上报 180 秒后变为 6380 秒
 - 搜索历史：重复同一关键词只 +1（30 秒去重）；`record=0` 的关联搜索不写入历史
 - 仪表盘后端标识：`PowerContext Server 1.4.1`
+- 记忆写入：`search_history` 的 `artifact.revision` 递增到 4，证明写入真实服务；日志见 `docs/evidence/api-samples.log`
 
 ---
 
@@ -92,9 +97,10 @@
 ### 6. 使用效果材料 ✅（基础数据）
 
 - 本地实测截图：`docs/screenshots/`（首页、搜索、仪表盘、Qoder Site）
-- 真实服务证据：`docs/evidence/remote-run.log`、`docs/evidence/api-samples.log`、`docs/TECHNICAL_BOUNDARIES.md`
+- 真实服务证据：`docs/TECHNICAL_BOUNDARIES.md`、`docs/evidence/`
   - scope：`scp_7nqcgr26xa07n99yc9jqq762n1`
   - `/v1/memory/remember`、`/v1/memory/search`（`mode: "fts"`）、`/v1/memory/entries/list`、`/v1/context/prepare` 均返回真实响应
+  - 1.4.1 最终验证实例（`127.0.0.1:8001`，独立 HOME）：`search_history` 的 `artifact.revision` 从 3 递增到 4，证明二次写入真实服务；完整响应见 `docs/evidence/api-samples.log`
 - 使用规模：当前为开发与自测数据，尚未收集外部用户数据（如实说明，不虚构）
 
 ---
@@ -103,10 +109,10 @@
 
 | 组件 | 实际使用方式 | 验收可核对点 |
 |------|-------------|-------------|
-| PowerContext 1.4.1 | 真实 HTTP 服务，默认 `POWERCONTEXT_MODE=remote`（不可达即报错） | `data/powercontext.db` 不再被写入；`/api/powercontext/status` 返回 `mode: remote`、`version: 1.4.1`；服务端 scope 与记忆可查询 |
-| seekdb | SQLite FTS5 兼容检索层，接口与混合检索参数保留，`vector_score` 固定 0.0 | 代码 `services/seekdb_service.py`；`/api/health` 返回 `retrieval: "SQLite FTS5 兼容检索层（未连接 seekdb 服务）"`；未声称运行了 OceanBase seekdb |
+| PowerContext 1.4.1 | 真实 HTTP 服务，`POWERCONTEXT_MODE=remote`（默认，不可达即报错） | `data/powercontext.db` 不用于远程模式；`/api/powercontext/status` 返回 `mode: remote`、`version: 1.4.1`；`docs/evidence/api-samples.log` 可见 artifact revision 递增 |
+| seekdb | 本地 SQLite + FTS5 兼容检索层，接口与混合检索参数保留，`vector_score` 固定 0.0 | 代码 `services/seekdb_service.py`；`/api/health` 明确标注「SQLite FTS5 兼容检索层（未连接 seekdb 服务）」；未声称运行了 OceanBase seekdb |
 
-**边界**：本机没有 Docker/WSL，无法运行官方 seekdb 服务，因此没有把 SQLite 说成 seekdb。比赛要求 seekdb / PowerContext 至少接入一个，PowerContext 是真实接入并通过实测的。
+**边界**：本机没有 Docker/WSL，无法运行官方 seekdb 服务，因此没有把 SQLite 说成 seekdb。比赛要求 seekdb / PowerContext 至少接入一个，PowerContext 是真实接入并通过实测的。Qoder Sites 展示页是静态快照，`/api/*` 不可用；完整功能需本地运行。
 
 ---
 
@@ -123,14 +129,15 @@
 
 ## 提交前检查清单
 
-- [x] Qoder Site 已发布并可访问
+- [x] Qoder Site 已发布并可访问（静态快照，`/api/*` 不可用，页面已明确标注）
 - [x] 代码仓库地址与分支确定
-- [x] 运行说明可复现
+- [x] 运行说明可复现（默认 remote，PowerContext 为必选依赖）
 - [x] 验证样例与实测数据
-- [x] Qoder 开发记录
+- [x] Qoder 开发记录与对话截图
+- [x] 真实服务日志（`docs/logs/`、`docs/evidence/`），不只依赖截图
 - [x] 技术真实性说明
-- [ ] Qoder 账号 UID（需要报名账号本人提供）
-- [ ] 最终 Commit id（推送后取 `git rev-parse HEAD`）
+- [x] Qoder 账号 UID：`01a19235-1324-7a33-89c7-ecb6d3abe5bf`
+- [x] 最终 Commit id：以最新推送提交为准（`git rev-parse HEAD`，并见 `SUBMISSION_INFO.md`）
 
 ---
 
@@ -142,3 +149,4 @@
 | Commit id | 推送后执行 `git rev-parse HEAD` 获取完整 40 位 |
 | Branch | `2026-competition-ecosystem` |
 | 作品链接 | https://smartknowledgehub-2yrvvh4q95p.qoder.zone |
+| Qoder UID | `01a19235-1324-7a33-89c7-ecb6d3abe5bf` |

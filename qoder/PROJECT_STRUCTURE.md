@@ -1,5 +1,7 @@
 # 项目结构说明
 
+> 历史设计稿说明：本文档保留早期目录规划。最终实现以 [README.md](README.md) 与 [docs/TECHNICAL_BOUNDARIES.md](docs/TECHNICAL_BOUNDARIES.md) 为准：检索层为 SQLite FTS5 兼容检索层（未连接 seekdb），PowerContext 为真实服务且默认 `remote`。下文涉及 MySQL/seekdb 的描述均为早期方案。
+
 ## 目录结构
 
 ```
@@ -64,7 +66,7 @@ SmartKnowledgeHub/
 
 **配置项**:
 - Flask 配置（SECRET_KEY, DEBUG）
-- 检索层为本地 SQLite FTS5 兼容层，无 seekdb 连接配置
+- SQLite 检索库路径（`data/seekdb.db`）
 - PowerContext 配置（API URL、API Key）
 - 文件上传配置（上传目录、文件大小限制、允许的文件类型）
 - 检索配置（向量权重、文本权重、结果数量限制）
@@ -72,8 +74,8 @@ SmartKnowledgeHub/
 ### 3. services/seekdb_service.py - SQLite FTS5 兼容检索层
 
 **职责**:
-- 封装 SQLite 文档存储与 FTS5 检索（seekdb 兼容接口）
-- 实现混合检索（向量检索 + 全文检索）
+- 封装 SQLite + FTS5 文档存储与检索
+- 实现全文检索、分类过滤与相关度排序
 - 管理文档的增删改查
 
 **核心方法**:
@@ -84,9 +86,9 @@ SmartKnowledgeHub/
 - `get_statistics()` - 获取统计信息
 
 **技术实现**:
-- 使用 Python 标准库 sqlite3 进行数据库操作
-- 使用 SQLite FTS5 实现文本检索
-- 向量检索为预留字段，`vector_score` 恒为 0
+- 使用 Python 标准库 sqlite3
+- 使用 FTS5（unicode61 分词）实现全文检索
+- `vector_score` 为预留字段，恒为 0，不参与排序
 
 ### 4. services/powercontext_service.py - PowerContext 服务
 
